@@ -1838,13 +1838,22 @@ async function fetchServerBalance(){
 }
 
 
-async function waitTonConnectUI(timeoutMs = 7000){
-  const t0 = Date.now();
-  while(Date.now() - t0 < timeoutMs){
-    if(window.TonConnectUI) return true;
+async function waitTonConnectUI(timeoutMs = 12000){
+  // ждём появления TonConnect UI в любом из возможных глобальных имён
+  const start = Date.now();
+  while(true){
+    const hasGlobal =
+      (typeof TonConnectUI !== "undefined") ||
+      (typeof window !== "undefined" && (
+        window.TonConnectUI ||
+        (window.tonconnect && window.tonconnect.ui) ||
+        (window.TonConnectUI && window.TonConnectUI.TonConnectUI)
+      ));
+
+    if(hasGlobal) return true;
+    if(Date.now() - start > timeoutMs) return false;
     await new Promise(r => setTimeout(r, 50));
   }
-  return false;
 }
 
 function nanoToTon(nanoStr){
@@ -1877,11 +1886,20 @@ async function connectTonWallet(){
   const manifestUrl = location.origin + "/tonconnect-manifest.json";
 
   // ждём загрузку TonConnect UI (особенно важно в Telegram WebView)
-  await waitTonConnectUI(2500);
+  const ok = await waitTonConnectUI(12000);
 
-  if(window.TonConnectUI){
+  // TonConnect UI может быть доступен как:
+  // 1) глобальный класс TonConnectUI
+  // 2) window.TonConnectUI (UMD)
+  // 3) window.TonConnectUI.TonConnectUI (некоторые сборки)
+  const TonUI =
+    (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
+    (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI));
+
+  if(ok && TonUI){
+
     if(!window.__tonUI){
-      window.__tonUI = new TonConnectUI({ manifestUrl });
+      window.__tonUI = new TonUI({ manifestUrl });
 
       window.__tonUI.onStatusChange(async (wallet)=>{
         const raw = wallet?.account?.address || "";
