@@ -915,16 +915,18 @@ body{
 </style>
   <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 
-<!-- TonConnect UI loader with CDN fallbacks -->
+
+
+<!-- TonConnect UI loader (self-hosted via API, Telegram-safe) -->
 <script>
 (function () {
   const urls = [
-    "https://cdn.jsdelivr.net/npm/@tonconnect/ui@0.2.0/dist/tonconnect-ui.min.js",
-    "https://unpkg.com/@tonconnect/ui@0.2.0/dist/tonconnect-ui.min.js"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js"
   ];
+
   function loadNext(i) {
     if (i >= urls.length) {
-      console.error("TonConnect UI не загрузился ни с одного CDN");
+      console.error("TonConnect UI не загрузился");
       return;
     }
     const s = document.createElement("script");
@@ -933,6 +935,7 @@ body{
     s.onerror = () => loadNext(i + 1);
     document.head.appendChild(s);
   }
+
   loadNext(0);
 })();
 </script>
