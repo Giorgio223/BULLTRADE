@@ -849,7 +849,71 @@ body{
 }
 .tonIcon svg{ width:18px; height:18px; display:block; }
 
+
+/* ===== UI modal (replaces prompt/alert/confirm for Telegram WebApp & iOS) ===== */
+.ui-modal-backdrop{
+  position:fixed; inset:0;
+  display:none;
+  align-items:center; justify-content:center;
+  padding: 18px;
+  background: rgba(0,0,0,.55);
+  z-index: 9999;
+}
+.ui-modal{
+  width: min(520px, 92vw);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg, rgba(30,0,50,.95), rgba(0,0,0,.90));
+  box-shadow: 0 18px 40px rgba(0,0,0,.65);
+  overflow:hidden;
+}
+.ui-modal-head{
+  padding: 14px 16px;
+  font-weight: 1000;
+  letter-spacing: .4px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+.ui-modal-body{
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgba(255,255,255,.90);
+}
+.ui-modal-input{
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.95);
+  font-weight: 850;
+  outline: none;
+}
+.ui-modal-actions{
+  display:flex;
+  gap:10px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+.ui-modal-actions button{
+  flex:1;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.92);
+  font-weight: 1000;
+  cursor:pointer;
+}
+.ui-modal-actions button.primary{
+  background: linear-gradient(180deg, rgba(120,40,160,.95), rgba(55,18,80,.95));
+  border-color: rgba(255,255,255,.16);
+}
+.ui-modal-actions button:active{ transform: scale(.99); }
+
 </style>
+  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -939,6 +1003,105 @@ try{
     Telegram.WebApp.expand();
   }
 }catch(e){}
+
+
+// ===== UI helpers (NO prompt/alert/confirm — fixes Telegram/iOS "prompt" error) =====
+const UI = (() => {
+  const els = {};
+  function ensure(){
+    if(els.backdrop) return;
+    els.backdrop = document.getElementById("uiModalBackdrop");
+    els.title = document.getElementById("uiModalTitle");
+    els.text = document.getElementById("uiModalText");
+    els.input = document.getElementById("uiModalInput");
+    els.ok = document.getElementById("uiModalOk");
+    els.cancel = document.getElementById("uiModalCancel");
+  }
+  function show({title="Сообщение", text="", withInput=false, placeholder="", value="", okText="Ок", cancelText="Отмена", showCancel=true}){
+    ensure();
+    return new Promise((resolve)=>{
+      els.title.textContent = title;
+      els.text.textContent = text;
+
+      els.input.style.display = withInput ? "block" : "none";
+      if(withInput){
+        els.input.value = value || "";
+        els.input.placeholder = placeholder || "";
+        setTimeout(()=>els.input.focus(), 50);
+      }
+
+      els.ok.textContent = okText;
+      els.cancel.textContent = cancelText;
+      els.cancel.style.display = showCancel ? "block" : "none";
+
+      els.backdrop.style.display = "flex";
+      els.backdrop.setAttribute("aria-hidden", "false");
+
+      const cleanup = (res)=>{
+        els.backdrop.style.display = "none";
+        els.backdrop.setAttribute("aria-hidden", "true");
+        els.ok.onclick = null;
+        els.cancel.onclick = null;
+        window.removeEventListener("keydown", onKey);
+        resolve(res);
+      };
+
+      const onKey = (e)=>{
+        if(e.key === "Escape") cleanup(null);
+        if(e.key === "Enter") cleanup(withInput ? (els.input.value || "") : true);
+      };
+      window.addEventListener("keydown", onKey);
+
+      els.ok.onclick = ()=> cleanup(withInput ? (els.input.value || "") : true);
+      els.cancel.onclick = ()=> cleanup(null);
+    });
+  }
+
+  async function alert(text, title="Сообщение"){
+    // Telegram popup if available, else custom modal
+    if(window.Telegram?.WebApp?.showPopup){
+      return new Promise((resolve)=>{
+        Telegram.WebApp.showPopup({ title, message: String(text || ""), buttons: [{id:"ok", type:"ok"}] }, ()=>resolve());
+      });
+    }
+    await show({ title, text: String(text||""), showCancel:false, okText:"Ок" });
+  }
+
+  async function confirm(text, title="Подтвердите"){
+    if(window.Telegram?.WebApp?.showPopup){
+      return new Promise((resolve)=>{
+        Telegram.WebApp.showPopup({
+          title,
+          message: String(text || ""),
+          buttons: [
+            {id:"cancel", type:"cancel"},
+            {id:"ok", type:"ok"}
+          ]
+        }, (id)=>resolve(id === "ok"));
+      });
+    }
+    const res = await show({ title, text: String(text||""), showCancel:true, okText:"Ок", cancelText:"Отмена" });
+    return !!res;
+  }
+
+  async function prompt(text, defaultValue="", title="Введите значение", placeholder=""){
+    // Telegram doesn't have input popup; use custom modal always
+    const res = await show({
+      title,
+      text: String(text||""),
+      withInput:true,
+      value: String(defaultValue||""),
+      placeholder: placeholder || "",
+      okText:"Готово",
+      cancelText:"Отмена",
+      showCancel:true
+    });
+    if(res === null) return null;
+    return String(res).trim();
+  }
+
+  return { alert, confirm, prompt };
+})();
 
 /* =============================
    Deterministic shared chart
@@ -1687,6 +1850,9 @@ async function refreshBalanceFromServer(){
 async function connectTonWallet(){
   const manifestUrl = location.origin + "/tonconnect-manifest.json";
 
+  // ждём загрузку TonConnect UI (особенно важно в Telegram WebView)
+  await waitTonConnectUI(2500);
+
   if(window.TonConnectUI){
     if(!window.__tonUI){
       window.__tonUI = new TonConnectUI({ manifestUrl });
@@ -1718,7 +1884,7 @@ async function connectTonWallet(){
 
   // Fallback (если TonConnect UI не загрузился)
   const existing = localStorage.getItem(WALLET_KEY) || "";
-  const addr = prompt("TonConnect не загрузился. Вставь TON адрес (демо).", existing);
+  const addr = await UI.prompt("TonConnect не загрузился. Вставь TON адрес (демо).", existing, "TON адрес");
   if(addr){
     localStorage.setItem(WALLET_KEY, addr.trim());
     const btn = document.getElementById("connectWalletBtn");
@@ -1734,12 +1900,12 @@ async function connectTonWallet(){
 
 async function startDeposit(){
   const addr = localStorage.getItem(WALLET_KEY);
-  if(!addr){ alert("Сначала привяжи кошелек."); return; }
+  if(!addr){ UI.alert("Сначала привяжи кошелек."); return; }
 
-  const amtStr = prompt("Сколько TON пополнить? (например 0.5)", "0.1");
+  const amtStr = await UI.prompt("Сколько TON пополнить? (например 0.5)", "0.1", "Депозит", "Например 0.5");
   if(!amtStr) return;
   const amountTon = Number(amtStr.replace(",", "."));
-  if(!Number.isFinite(amountTon) || amountTon <= 0){ alert("Неверная сумма"); return; }
+  if(!Number.isFinite(amountTon) || amountTon <= 0){ UI.alert("Неверная сумма"); return; }
 
   const r = await fetch("/api/deposit/create", {
     method: "POST",
@@ -1747,14 +1913,14 @@ async function startDeposit(){
     body: JSON.stringify({ address: addr, amountTon })
   });
   const t = await r.text();
-  if(!r.ok){ alert("Ошибка депозита: " + t); return; }
+  if(!r.ok){ await UI.alert("Ошибка депозита: " + t); return; }
   const data = JSON.parse(t);
 
   const msg =
     "Адрес депозита:\\n" + data.depositAddress + "\\n\\n" +
     "Комментарий (ОБЯЗАТЕЛЬНО):\\n" + data.comment + "\\n\\n" +
     "Открыть кошелек для отправки?";
-  if(confirm(msg)){
+  if(await UI.confirm(msg, "Депозит")){
     location.href = data.deeplink;
   }
   // ждём и подтягиваем баланс
@@ -1764,14 +1930,14 @@ async function startDeposit(){
 
 async function requestWithdraw(){
   const addr = localStorage.getItem(WALLET_KEY);
-  if(!addr){ alert("Сначала привяжи кошелек."); return; }
+  if(!addr){ UI.alert("Сначала привяжи кошелек."); return; }
 
-  const amtStr = prompt("Сколько TON вывести?", "0.1");
+  const amtStr = await UI.prompt("Сколько TON вывести?", "0.1", "Вывод", "Например 0.1");
   if(!amtStr) return;
   const amountTon = Number(amtStr.replace(",", "."));
-  if(!Number.isFinite(amountTon) || amountTon <= 0){ alert("Неверная сумма"); return; }
+  if(!Number.isFinite(amountTon) || amountTon <= 0){ UI.alert("Неверная сумма"); return; }
 
-  const toAddr = prompt("Куда вывести? (TON адрес)", addr);
+  const toAddr = await UI.prompt("Куда вывести? (TON адрес)", addr, "Адрес вывода", "TON адрес");
   if(!toAddr) return;
 
   const r = await fetch("/api/withdraw/request", {
@@ -1780,11 +1946,11 @@ async function requestWithdraw(){
     body: JSON.stringify({ fromAddress: addr, toAddress: toAddr.trim(), amountTon })
   });
   const msg = await r.text();
-  if(!r.ok){ alert("Ошибка вывода: " + msg); return; }
+  if(!r.ok){ await UI.alert("Ошибка вывода: " + msg); return; }
 
   // сразу обновим баланс из сервера
   await fetchServerBalance();
-  alert(msg);
+  await UI.alert(msg, "Вывод");
 }
 
 (function(){
@@ -1805,5 +1971,21 @@ async function requestWithdraw(){
 })();
 
 </script>
+
+  <!-- UI modal (used instead of prompt/alert/confirm) -->
+  <div id="uiModalBackdrop" class="ui-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="ui-modal">
+      <div class="ui-modal-head" id="uiModalTitle">Сообщение</div>
+      <div class="ui-modal-body">
+        <div id="uiModalText"></div>
+        <input id="uiModalInput" class="ui-modal-input" type="text" inputmode="text" autocomplete="off" style="display:none" />
+      </div>
+      <div class="ui-modal-actions">
+        <button id="uiModalCancel" type="button">Отмена</button>
+        <button id="uiModalOk" class="primary" type="button">Ок</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
