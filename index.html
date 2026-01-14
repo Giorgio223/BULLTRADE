@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -314,7 +314,6 @@
       min-height: 10px;
     }
 
-    /* Mobile optimization */
     @media (max-width: 600px){
       .app{
         width: 100%;
@@ -369,7 +368,7 @@
       </div>
     </div>
 
-    <div id="roundHistory" class="round-history bar" aria-label="round history"></div>
+    <div id="roundHistory" class="round-history" aria-label="round history"></div>
 
     <div class="controls">
       <div class="actionbar">
@@ -415,8 +414,8 @@
         <div class="ab-right">
           <div class="midhead">CASHOUT</div>
           <div class="cashRow">
-            <button class="cashBtn half" onclick="cashoutHalf()">HALF</button>
-            <button class="cashBtn full" onclick="cashoutAll()">ALL</button>
+            <button class="cashBtn" onclick="cashoutHalf()">HALF</button>
+            <button class="cashBtn" onclick="cashoutAll()">ALL</button>
           </div>
         </div>
       </div>
@@ -426,7 +425,6 @@
   </div>
 
 <script>
-// ===== Telegram WebApp helpers (mobile feel) =====
 try{
   if(window.Telegram && Telegram.WebApp){
     Telegram.WebApp.ready();
@@ -434,16 +432,12 @@ try{
   }
 }catch(e){}
 
-/* ===== Deterministic shared chart (server-seeded) + Pan/Zoom =====
-   Requires /api/state (Vercel) backed by Upstash Redis.
-*/
 const canvas = document.getElementById('candleCanvas');
 const ctx = canvas.getContext('2d');
 const countdownEl = document.getElementById('countdown');
 const historyEl = document.getElementById('roundHistory');
 
 const STATE = {
-  // Server round state
   roundId: 0,
   seed: "",
   cycleStartMs: 0,
@@ -452,26 +446,22 @@ const STATE = {
   betCountdownSec: 7,
   volatility: 0.85,
   startPrice: 100,
+  targetPrice: 100,
 
-  // Phase
   phase: "RUN",
   _prevPhase: null,
 
-  // Chart
   candles: [],
   maxCandles: 120,
   price: 100,
   generatedTick: -1,
 
-  // Chart viewport (zoom/pan)
   view: { visible: 60, offset: 0 },
   _gesture: { pointers: new Map(), mode: null, startDist: 0, startVisible: 60, lastX: 0 },
 
-  // History
   history: [],
   historyMax: 12,
 
-  // Betting (client-side demo)
   balance: 100.00,
   betAmount: 1.00,
   pendingBet: null,
@@ -479,7 +469,6 @@ const STATE = {
   portfolio: 0.00,
   insuranceOn: false,
 
-  // Round anchors
   roundStartPrice: null,
   roundEndPrice: null
 };
@@ -526,27 +515,29 @@ function randn(rng){
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-/* ===== Candle generator ===== */
+/* ===== Candle generator that moves toward targetPrice ===== */
 function makeNextCandle(prevClose, tick){
   const rng = rngForTick(tick);
+
+  const ticksTotal = Math.floor(STATE.runDurationMs / STATE.tickMs);
+  const ticksLeft = Math.max(1, ticksTotal - tick);
+
+  const target = Number(STATE.targetPrice ?? prevClose);
+  const driftToTarget = (target - prevClose) / ticksLeft;
+
+  const noise = randn(rng) * (STATE.volatility * 0.35);
+
   const open = prevClose;
+  const close = open + driftToTarget + noise;
 
-  const drift = randn(rng) * STATE.volatility;
-  const close = open + drift;
+  const body = Math.max(0.05, Math.abs(close - open));
+  const wickUp = Math.abs(randn(rng)) * (0.25 + rng()*0.35);
+  const wickDn = Math.abs(randn(rng)) * (0.25 + rng()*0.35);
 
-  const body = Math.max(0.10, Math.abs(close - open));
-  const longWick = rng() < 0.18;
-  const wickMult = longWick ? (1.4 + rng()*0.9) : (0.35 + rng()*0.65);
-  const cap = STATE.volatility * 2.2 + 0.8;
-  const upWick = Math.min(cap, body * wickMult * (0.7 + rng()*0.8));
-  const dnWick = Math.min(cap, body * wickMult * (0.7 + rng()*0.8));
+  const high = Math.max(open, close) + (body * 0.35 + wickUp);
+  const low  = Math.min(open, close) - (body * 0.35 + wickDn);
 
-  return {
-    open,
-    close,
-    high: Math.max(open, close) + upWick,
-    low:  Math.min(open, close) - dnWick
-  };
+  return { open, close, high, low };
 }
 
 function seedCandles(){
@@ -697,7 +688,7 @@ function pushHistory(dir){
   renderHistory();
 }
 
-/* ===== Betting + Portfolio ===== */
+/* ===== Betting ===== */
 function clampAmount(v){
   v = Math.max(0.1, Math.min(20, Number(v)));
   return Math.round(v * 100) / 100;
@@ -769,7 +760,7 @@ function cashoutAll(){
 function onUp(){ placeBet("LONG"); }
 function onDown(){ placeBet("SHORT"); }
 
-/* ===== Pan/Zoom gestures ===== */
+/* ===== Pan/Zoom ===== */
 function clampView(){
   if(!STATE.view) STATE.view = { visible: STATE.maxCandles, offset: 0 };
   STATE.view.visible = Math.max(12, Math.min(STATE.maxCandles, Math.floor(STATE.view.visible || 60)));
@@ -830,8 +821,7 @@ function installPanZoom(){
       const dist = getDist();
       if(dist <= 0 || g.startDist <= 0) return;
       const ratio = g.startDist / dist;
-      const target = Math.round(g.startVisible * ratio);
-      zoomTo(target);
+      zoomTo(Math.round(g.startVisible * ratio));
       return;
     }
 
@@ -878,13 +868,11 @@ function installPanZoom(){
   });
 }
 
-/* ===== Deterministic round timing from server state ===== */
+/* ===== Round timing ===== */
 function computePhase(now){
   const countdownMs = STATE.betCountdownSec * 1000;
   const t = now - STATE.cycleStartMs;
-  if(t < STATE.runDurationMs){
-    return { phase: "RUN", remainingSec: 0, t };
-  }
+  if(t < STATE.runDurationMs) return { phase: "RUN", remainingSec: 0, t };
   if(t < STATE.runDurationMs + countdownMs){
     const rem = Math.max(0, Math.ceil((STATE.runDurationMs + countdownMs - t)/1000));
     return { phase: "COUNTDOWN", remainingSec: rem, t };
@@ -916,13 +904,22 @@ function generateToNow(){
       STATE.generatedTick = nextTick;
       if(STATE.candles.length > STATE.maxCandles) STATE.candles.shift();
     }
+
+    // If we reached the last tick, force exact landing on targetPrice
+    const ticksTotal = Math.floor(STATE.runDurationMs / STATE.tickMs);
+    if(STATE.generatedTick >= ticksTotal - 1){
+      const last = STATE.candles[STATE.candles.length - 1];
+      if(last){
+        last.close = Number(STATE.targetPrice);
+      }
+    }
   }
+
   clampView();
 }
 
 function handlePhaseTransitions(){
-  const now = Date.now();
-  const ph = computePhase(now);
+  const ph = computePhase(Date.now());
   if(ph.phase === "EXPIRED") return;
 
   if(STATE._prevPhase == null) STATE._prevPhase = ph.phase;
@@ -948,9 +945,16 @@ function handlePhaseTransitions(){
 
 async function fetchState(){
   const res = await fetch("/api/state", { cache: "no-store" });
+  if(!res.ok){
+    console.error("api/state error", res.status, await res.text());
+    return;
+  }
   const data = await res.json();
 
-  const changed = (data.roundId !== STATE.roundId) || (data.seed !== STATE.seed) || (data.cycleStartMs !== STATE.cycleStartMs);
+  const changed =
+    (data.roundId !== STATE.roundId) ||
+    (data.seed !== STATE.seed) ||
+    (data.cycleStartMs !== STATE.cycleStartMs);
 
   STATE.roundId = data.roundId;
   STATE.seed = data.seed;
@@ -960,6 +964,7 @@ async function fetchState(){
   STATE.betCountdownSec = data.betCountdownSec;
   STATE.volatility = data.volatility;
   STATE.startPrice = data.startPrice;
+  STATE.targetPrice = data.targetPrice;
 
   if(changed){
     seedCandles();
