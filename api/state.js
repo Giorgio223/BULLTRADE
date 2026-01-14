@@ -1,7 +1,6 @@
 // /api/state.js (Vercel Serverless Function)
 // Shared deterministic round state stored in Upstash Redis.
-// All users see identical candles because chart is generated from:
-// seed + cycleStartMs + tick index.
+// Adds targetPrice: the client chart moves toward this number during RUN.
 
 const KEY = "bt:current";
 
@@ -20,38 +19,6 @@ function cyrb128(str){
   h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
   return [(h1^h2^h3^h4)>>>0, (h2^h1)>>>0, (h3^h1)>>>0, (h4^h1)>>>0];
 }
-function mulberry32(a){
-  return function(){
-    let t = (a += 0x6D2B79F5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function rngForTick(seed, tick){
-  const h = cyrb128(seed + ":" + String(tick));
-  return mulberry32(h[0]);
-}
-function randn(rng){
-  let u = 0, v = 0;
-  while(u === 0) u = rng();
-  while(v === 0) v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-function makeNextCandle(prevClose, tick, seed, volatility){
-  const rng = rngForTick(seed, tick);
-  const open = prevClose;
-  const drift = randn(rng) * volatility;
-  const close = open + drift;
-
-  const body = Math.max(0.10, Math.abs(close - open));
-  const longWick = rng() < 0.18;
-  const wickMult = longWick ? (1.4 + rng()*0.9) : (0.35 + rng()*0.65);
-  const cap = volatility * 2.2 + 0.8;
-  const upWick = Math.min(cap, body * wickMult * (0.7 + rng()*0.8));
-  const dnWick = Math.min(cap, body * wickMult * (0.7 + rng()*0.8));
-  return { open, close, high: Math.max(open, close) + upWick, low: Math.min(open, close) - dnWick };
-}
 
 async function redisGet(url, token, key){
   const r = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
@@ -60,6 +27,7 @@ async function redisGet(url, token, key){
   const j = await r.json();
   return j?.result ?? null;
 }
+
 async function redisSet(url, token, key, value){
   const r = await fetch(`${url}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -70,35 +38,42 @@ async function redisSet(url, token, key, value){
 function newSeed(){
   // 32 hex chars
   return [...crypto.getRandomValues(new Uint8Array(16))]
-    .map(b=>b.toString(16).padStart(2,"0"))
+    .map(b => b.toString(16).padStart(2, "0"))
     .join("");
 }
 
+// Deterministic target from seed so everyone has the same target for the round.
+function makeTargetPrice(startPrice, seed){
+  const h = cyrb128(seed)[0];
+  const r = (h % 1000) / 1000;        // 0..0.999
+  const dir = (h % 2 === 0) ? 1 : -1; // UP/DOWN
+  const delta = 1 + r * 6;            // 1..7
+  return Math.round((startPrice + dir * delta) * 100) / 100;
+}
+
+// Since client is designed to land exactly on targetPrice, we can treat endPrice as targetPrice.
 function computeEndPrice(state){
-  const ticks = Math.floor(state.runDurationMs / state.tickMs);
-  let p = state.startPrice;
-  for(let i=0;i<ticks;i++){
-    const c = makeNextCandle(p, i, state.seed, state.volatility);
-    p = c.close;
-  }
-  return p;
+  const t = Number(state.targetPrice ?? state.startPrice);
+  return Math.round(t * 100) / 100;
 }
 
 function rotateIfExpired(state, now){
   const countdownMs = state.betCountdownSec * 1000;
-  const total = state.runDurationMs + countdownMs;
-  const t = now - state.cycleStartMs;
-  if(t < total) return state;
+  const totalMs = state.runDurationMs + countdownMs;
+  const elapsed = now - state.cycleStartMs;
+  if(elapsed < totalMs) return state;
 
-  // Continue smoothly: next round starts from deterministic end price
   const lastEnd = computeEndPrice(state);
+  const nextSeed = newSeed();
+  const nextStart = Math.round(lastEnd * 100) / 100;
 
   return {
     ...state,
     roundId: (state.roundId || 0) + 1,
-    seed: newSeed(),
+    seed: nextSeed,
     cycleStartMs: now,
-    startPrice: Math.round(lastEnd * 100) / 100
+    startPrice: nextStart,
+    targetPrice: makeTargetPrice(nextStart, nextSeed)
   };
 }
 
@@ -114,28 +89,38 @@ export default async function handler(req, res){
   }
 
   const now = Date.now();
-  let raw = await redisGet(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, KEY);
 
+  let raw = await redisGet(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, KEY);
   let state = null;
+
   if(raw){
-    try{ state = JSON.parse(raw); }catch(e){ state = null; }
+    try { state = JSON.parse(raw); } catch(e) { state = null; }
   }
 
   if(!state){
+    const seed = newSeed();
     state = {
       roundId: 1,
-      seed: newSeed(),
+      seed,
       cycleStartMs: now,
       tickMs: 500,
       runDurationMs: 30000,
       betCountdownSec: 7,
       volatility: 0.85,
-      startPrice: 100
+      startPrice: 100,
+      targetPrice: makeTargetPrice(100, seed)
     };
   }else{
+    // Backward compatibility: ensure targetPrice exists
+    if(state.targetPrice == null){
+      const sp = Number(state.startPrice ?? 100);
+      const sd = String(state.seed || newSeed());
+      state.targetPrice = makeTargetPrice(sp, sd);
+    }
     state = rotateIfExpired(state, now);
   }
 
+  // Persist state (and rotation if happened)
   await redisSet(UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, KEY, JSON.stringify(state));
 
   res.setHeader("Cache-Control", "no-store");
