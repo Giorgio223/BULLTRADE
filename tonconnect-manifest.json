@@ -1,7 +1,5 @@
 {
-  "url": "https://YOUR_DOMAIN",
+  "url": "https://bulltrade-three.vercel.app",
   "name": "BullTrade",
-  "iconUrl": "https://YOUR_DOMAIN/ton-icon-180.png",
-  "termsOfUseUrl": "https://YOUR_DOMAIN/terms-of-use.txt",
-  "privacyPolicyUrl": "https://YOUR_DOMAIN/privacy-policy.txt"
+  "iconUrl": "https://bulltrade-three.vercel.app/ton-icon.png"
 }
