@@ -1,0 +1,1405 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BULL TRADE</title>
+  <style>
+    :root{
+      --bg0:#12001f;
+      --bg2:#3b0061;
+      --text: rgba(255,255,255,.92);
+      --green:#1fcf66;
+      --red:#d93b3b;
+      --shadow: 0 12px 30px rgba(0,0,0,.55);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 500px at 75% 0%, rgba(116, 0, 190, .35), transparent 60%),
+        radial-gradient(900px 600px at 10% 10%, rgba(43, 0, 92, .70), transparent 55%),
+        linear-gradient(180deg, var(--bg2), var(--bg0));
+    }
+    .app{
+      width:min(1100px, 96vw);
+      margin: 18px auto 28px;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      overflow:hidden;
+      box-shadow: var(--shadow);
+      background: rgba(0,0,0,.15);
+      backdrop-filter: blur(6px);
+    }
+    /* Top bar */
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:flex-start;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(0,0,0,.65), rgba(0,0,0,.35));
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      min-height: 64px;
+    }
+    .brandText{
+      font-weight: 1000;
+      letter-spacing: .6px;
+      font-size: 18px;
+      line-height: 1;
+      user-select:none;
+    }
+    /* Chart area */
+    .chart-wrap{ padding: 10px 10px 0; }
+    .chart-shell{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 10px;
+      overflow:hidden;
+      background: linear-gradient(180deg, rgba(50,0,85,.55), rgba(0,0,0,.30));
+      position:relative;
+    }
+    .chart-body{ height: 380px; position:relative; }
+    canvas{ width:100%; height:100%; display:block; }
+    /* Countdown ring (centered) */
+    .countdown{
+      position:absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 92px;
+      height: 92px;
+      border-radius: 999px;
+      display:none;                 /* hidden during RUN */
+      align-items:center;
+      justify-content:center;
+      font-weight: 1000;
+      font-size: 28px;
+      color: #fff;                  /* numbers white */
+      z-index: 6;
+      pointer-events:none;
+      background: rgba(255,255,255,.05); /* translucent ring */
+      border: 2px solid rgba(255,255,255,.25);
+      box-shadow: none;
+      user-select:none;
+      pointer-events:none;
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    .countdown::after{
+      content:"";
+      position:relative;
+      inset: 7px;
+      border-radius: 999px;
+      border: 3px solid transparent;
+      border-top-color: rgba(255,255,255,.92); /* ticking stripe */
+      animation: spin 1s linear infinite;
+      opacity: .9;
+    }
+    @keyframes spin{
+      from{ transform: rotate(0deg); }
+      to{ transform: rotate(360deg); }
+    }
+    /* Bottom tiles */
+    /* Controls panel */
+    .controls{
+      display:grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(0,0,0,.30);
+    }
+    .card{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 11px;
+      background: rgba(0,0,0,.35);
+      padding: 10px;
+    }
+    .card h4{
+      margin:0 0 8px;
+      font-size: 11px;
+      letter-spacing:.7px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.72);
+    }
+    .row{ display:flex; gap:8px; align-items:center; justify-content:space-between; }
+    .mini{ flex:1; display:flex; gap:8px; align-items:center; }
+    .num{
+      width: 70px;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      text-align:center;
+    }
+    .btn{
+      padding: 12px 12px;
+      border-radius: 10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      cursor:pointer;
+      width: 100%;
+    }
+    .btn:hover{ background: rgba(255,255,255,.10) }
+    .bet-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .cta{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:stretch; }
+    .cta .big{
+      padding: 16px 12px;
+      font-size: 14px;
+      letter-spacing:.4px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.12);
+      font-weight: 1000;
+      cursor:pointer;
+    }
+    .big.up{ background: linear-gradient(180deg, rgba(31,207,102,.95), rgba(12,120,56,.95)); }
+    .big.down{ background: linear-gradient(180deg, rgba(217,59,59,.95), rgba(130,24,24,.95)); }
+    .foot{
+      padding: 10px 12px;
+      border-top:1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.35);
+      min-height: 10px;
+    }
+    /* Amount preset panel (compact like bottom bar buttons) */
+    .amount-bar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+      justify-content:flex-start;
+    }
+    .amt-btn{
+      width: 64px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      cursor:pointer;
+      user-select:none;
+    }
+    .amt-btn:hover{ background: rgba(255,255,255,.09); }
+    .amt-btn.is-active{
+      border-color: rgba(255, 138, 0, .65);
+      background: rgba(255, 138, 0, .14);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .amt-display{
+      margin-left:auto;
+      min-width: 92px;
+      height: 44px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 138, 0, .55);
+      background: rgba(255, 138, 0, .10);
+      font-weight: 1000;
+      letter-spacing: .2px;
+    }
+    .amount-bar.single{
+      max-width: 520px;
+    }
+    /* Bet panel like reference UI */
+    .betpanel{
+      background: rgba(10,10,12,.55);
+      border-color: rgba(255,255,255,.12);
+    }
+    .betpanel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:10px;
+    }
+    .betpanel-title{
+      font-size: 12px;
+      letter-spacing: .9px;
+      text-transform: uppercase;
+      font-weight: 1000;
+      color: rgba(255,255,255,.82);
+    }
+    .betpanel-grid{
+      display:grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .betbtn{
+      height: 34px;
+      border-radius: 7px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.18));
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      cursor: pointer;
+      user-select:none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .betbtn:hover{ background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.22)); }
+    .betbtn.is-active{
+      border-color: rgba(255, 170, 60, .85);
+      background: linear-gradient(180deg, rgba(255,170,60,.35), rgba(120,60,0,.25));
+    }
+    .betbtn.action{
+      color: rgba(255,255,255,.78);
+      font-weight: 900;
+      letter-spacing:.2px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.22));
+      border-color: rgba(255,255,255,.14);
+    }
+    .betpanel-actions{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .bigbet{
+      height: 74px;
+      border-radius: 10px;
+      border: 2px solid rgba(0,0,0,.35);
+      cursor:pointer;
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      font-weight: 1000;
+      letter-spacing:.4px;
+      text-transform: uppercase;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 10px 20px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .bigbet.su{
+      background: linear-gradient(180deg, rgba(70,220,70,.95), rgba(20,140,35,.95));
+      border-color: rgba(0,0,0,.35);
+      color: rgba(255,255,255,.96);
+    }
+    .bigbet.giu{
+      background: linear-gradient(180deg, rgba(210,60,60,.95), rgba(120,20,20,.95));
+      border-color: rgba(0,0,0,.35);
+      color: rgba(255,255,255,.96);
+    }
+    .bigbet-text{
+      font-size: 26px;
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    .bigbet-amt{
+      position:relative;
+      left: 18px;
+      bottom: 10px;
+      font-size: 18px;
+      font-weight: 1000;
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    
+    /* Round history chips */
+    .round-history{
+      width: 100%;
+      display:flex;
+      gap: 10px;
+      flex-wrap: nowrap;
+      align-items:center;
+      justify-content:flex-start;
+      padding: 14px 16px;
+      margin: 0 0 14px 0;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(0,0,0,.22), rgba(0,0,0,.10));
+      overflow:hidden;
+    }
+    .round-history.bar{
+      /* sits exactly where the sec/min bar used to be */
+    }
+    .hist-chip{
+      width: 30px;
+      height: 22px;
+      border-radius: 9px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+      font-weight: 1000;
+      color: #fff;
+      opacity: .95;
+      flex: 0 0 auto;
+    }
+    .hist-chip.up{ background: rgba(31,207,102,.78); }
+    .hist-chip.down{ background: rgba(217,59,59,.78); }
+    .hist-chip .tri{
+      font-size: 14px;
+      line-height: 1;
+      transform: translateY(-.5px);
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+    }
+    @media (max-width: 900px){
+      .betpanel-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .betbtn.action{ grid-column: span 3; }
+      .betpanel-actions{ grid-template-columns: 1fr; }
+      .bigbet-amt{ left: 16px; }
+    }
+    @media (max-width: 900px){
+      .controls{grid-template-columns: 1fr;}
+      .chart-body{height: 420px;}
+    }
+  
+.insurance-btn{
+  margin: 12px auto 0 auto;
+  width: 92%;
+  height: 54px;
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: .5px;
+  background: linear-gradient(180deg,#2a2a2a,#111);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+}
+.insurance-btn:hover{
+  background: linear-gradient(180deg,#3a3a3a,#181818);
+}
+
+
+    /* LONG/SHORT + Insurance layout */
+    .betpanel-actions{
+      display:grid !important;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .betpanel-actions .insurance-btn{
+      grid-column: 1 / -1;
+      height: 54px;
+      border-radius: 14px;
+      font-weight: 1000;
+      font-size: 18px;
+      letter-spacing: .5px;
+      background: linear-gradient(180deg,#2a2a2a,#111);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+      cursor:pointer;
+    }
+    .betpanel-actions .insurance-btn:hover{
+      background: linear-gradient(180deg,#3a3a3a,#181818);
+    }
+
+    /* Big LONG/SHORT buttons */
+    .bigbet{
+      height: 78px;
+      border-radius: 14px;
+      border: 2px solid rgba(0,0,0,.35);
+      cursor:pointer;
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      font-weight: 1000;
+      letter-spacing:.4px;
+      text-transform: uppercase;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 10px 20px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .bigbet.su{
+      background: linear-gradient(180deg, rgba(70,220,70,.95), rgba(20,140,35,.95));
+      color: rgba(255,255,255,.96);
+    }
+    .bigbet.giu{
+      background: linear-gradient(180deg, rgba(210,60,60,.95), rgba(120,20,20,.95));
+      color: rgba(255,255,255,.96);
+    }
+    .bigbet-text{ font-size: 34px; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+    .bigbet-amt{
+      position:absolute;
+      left: 18px;
+      bottom: 10px;
+      font-size: 18px;
+      font-weight: 1000;
+      text-shadow: 0 2px 10px rgba(0,0,0,.55);
+    }
+    
+
+
+    /* Bet panel split layout: amounts left, LONG/SHORT/INSURANCE right */
+    .betpanel-body{
+      display:grid;
+      grid-template-columns: 1fr 380px;
+      gap: 16px;
+      align-items:start;
+    }
+    .betpanel-left{ min-width: 0; }
+    .betpanel-right{ min-width: 0; }
+    .betpanel-actions.rightstack{
+      display:flex !important;
+      flex-direction:column;
+      gap: 12px;
+      margin-top: 0 !important;
+    }
+    .betpanel-actions.rightstack .bigbet{
+      width: 100%;
+      height: 84px;
+      border-radius: 16px;
+    }
+    .betpanel-actions.rightstack .insurance-btn{
+      width: 100%;
+      height: 58px;
+      border-radius: 16px;
+      margin: 0 !important;
+    }
+
+    @media (max-width: 1100px){
+      .betpanel-body{ grid-template-columns: 1fr; }
+      .betpanel-actions.rightstack .bigbet{ height: 78px; }
+    }
+
+
+    /* ---- FIX: proper left/right layout for BET SELECTION ---- */
+    .betpanel{ width: 100% !important; }
+    /* If parent uses grid, make this card span full row */
+    .betpanel{ grid-column: 1 / -1; }
+
+    .betpanel-body{
+      display:grid;
+      grid-template-columns: 1fr 520px; /* left amounts, right actions */
+      gap: 18px;
+      align-items:start;
+    }
+
+    /* Left area: amounts grid + Cancel/Double on the far right inside left */
+    .betpanel-left{
+      display:grid;
+      grid-template-columns: 1fr 160px; /* amounts + side buttons */
+      gap: 14px;
+      align-items:start;
+      min-width: 0;
+    }
+
+    .betpanel-grid{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(92px, 1fr));
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .betpanel-side{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+      align-items:stretch;
+    }
+
+    .betbtn{
+      height: 44px;
+      font-size: 20px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+    .betbtn.action{
+      height: 44px;
+      font-size: 18px;
+    }
+
+    .betpanel-actions.rightstack{
+      display:flex !important;
+      flex-direction:column;
+      gap: 14px;
+      margin-top: 0 !important;
+      align-items:stretch;
+      justify-content:flex-start;
+    }
+    .betpanel-actions.rightstack .bigbet{
+      width: 100%;
+      height: 92px;
+      border-radius: 18px;
+    }
+    .betpanel-actions.rightstack .insurance-btn{
+      width: 100%;
+      height: 62px;
+      border-radius: 18px;
+      margin: 0 !important;
+    }
+
+    @media (max-width: 1100px){
+      .betpanel-body{ grid-template-columns: 1fr; }
+      .betpanel-left{ grid-template-columns: 1fr; }
+      .betpanel-side{ flex-direction:row; }
+      .betpanel-grid{ grid-template-columns: repeat(3, minmax(92px, 1fr)); }
+    }
+
+
+    /* ---- FIX v28: BET SELECTION layout (amounts left, actions right) ---- */
+    .betpanel{ width: 100% !important; grid-column: 1 / -1; }
+    .betpanel-body{
+      display:grid;
+      grid-template-columns: 1fr 520px;
+      gap: 18px;
+      align-items:start;
+    }
+    .betpanel-left{
+      display:grid;
+      grid-template-columns: 1fr 180px;
+      gap: 14px;
+      align-items:start;
+    }
+    .betpanel-grid{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(92px, 1fr));
+      gap: 10px;
+    }
+    .betpanel-side{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+    }
+    .betbtn{ height: 46px; font-size: 20px; border-radius: 12px; }
+    .betbtn.action{ font-size: 18px; }
+    .betpanel-actions.rightstack{
+      display:flex !important;
+      flex-direction:column;
+      gap: 14px;
+      align-items:stretch;
+      margin-top: 0 !important;
+    }
+    .betpanel-actions.rightstack .bigbet{
+      width: 100%;
+      height: 92px;
+      border-radius: 18px;
+    }
+    .betpanel-actions.rightstack .insurance-btn{
+      width: 100%;
+      height: 62px;
+      border-radius: 18px;
+      margin: 0 !important;
+    }
+    @media (max-width: 1100px){
+      .betpanel-body{ grid-template-columns: 1fr; }
+      .betpanel-left{ grid-template-columns: 1fr; }
+      .betpanel-grid{ grid-template-columns: repeat(3, minmax(92px, 1fr)); }
+      .betpanel-side{ flex-direction:row; }
+    }
+
+
+/* ===== v31: Screenshot-like compact bottom bar ===== */
+.controls{
+  display:block;              /* override old grid */
+  padding: 10px 10px 12px;
+  background: rgba(0,0,0,.30);
+}
+.actionbar{
+  display:grid;
+  grid-template-columns: 1.55fr 1fr .9fr;
+  gap: 16px;
+  align-items:start;
+}
+.ab-left{ min-width:0; }
+.selbox{
+  border:1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  background: rgba(0,0,0,.35);
+  padding: 10px;
+}
+.selhead{
+  text-align:center;
+  font-weight: 1000;
+  letter-spacing: .6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.86);
+  margin-bottom: 10px;
+}
+.selgrid{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(78px, 1fr));
+  gap: 10px;
+}
+.amt{
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.28));
+  color: rgba(255,255,255,.92);
+  font-weight: 1000;
+  font-size: 18px;
+  cursor:pointer;
+  user-select:none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+.amt:hover{ background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.32)); }
+.amt.is-active{
+  border-color: rgba(255, 170, 60, .95);
+  background: linear-gradient(180deg, rgba(255,170,60,.55), rgba(120,60,0,.35));
+}
+.selactions{
+  display:flex;
+  justify-content:flex-end;
+  margin-top: 10px;
+}
+.mini-action{
+  height: 38px;
+  min-width: 140px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.30));
+  color: rgba(255,255,255,.70);
+  font-weight: 900;
+  letter-spacing: .3px;
+  cursor:pointer;
+}
+.mini-action:hover{ background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.34)); }
+
+/* SU/GIÙ bar */
+.sugiubar{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 14px;
+  overflow:hidden;
+  border: 2px solid rgba(0,0,0,.35);
+  box-shadow: 0 10px 20px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.10);
+}
+.sgbtn{
+  height: 74px;
+  border: 0;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 14px;
+  font-weight: 1000;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.96);
+}
+.sgbtn.su{ background: linear-gradient(180deg, rgba(70,220,70,.95), rgba(20,140,35,.95)); }
+.sgbtn.giu{ background: linear-gradient(180deg, rgba(210,60,60,.95), rgba(120,20,20,.95)); }
+.sgbtn + .sgbtn{ border-left: 2px solid rgba(0,0,0,.35); }
+.sgtxt{ font-size: 28px; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+.sgtri{ font-size: 26px; opacity:.95; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+
+/* MID / RIGHT titles */
+.ab-mid,.ab-right{ min-width:0; }
+.midhead{
+  text-align:center;
+  font-weight: 1000;
+  letter-spacing: .7px;
+  font-size: 14px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.86);
+  margin-bottom: 10px;
+}
+
+/* Portfolio box */
+.portfolioBox{
+  border:1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.25));
+  padding: 16px 14px;
+  text-align:center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
+}
+.portfolioVal{
+  font-size: 34px;
+  font-weight: 1000;
+  color: rgba(255, 232, 140, .95);
+  letter-spacing: .4px;
+}
+.portfolioNote{
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: .65;
+}
+
+/* PROBET button (replaces Insurance) */
+.probetBtn{
+  margin-top: 12px;
+  width: 100%;
+  height: 58px;
+  border-radius: 16px;
+  border: 2px solid rgba(0,0,0,.35);
+  cursor:pointer;
+  font-weight: 1000;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.95);
+  background: linear-gradient(180deg, rgba(120,40,160,.95), rgba(55,18,80,.95));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 10px 18px rgba(0,0,0,.28);
+}
+.probetBtn.is-on{
+  border-color: rgba(255, 210, 120, .65);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 10px 22px rgba(0,0,0,.34);
+}
+
+/* Cashout buttons */
+.cashRow{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.cashBtn{
+  height: 78px;
+  border-radius: 14px;
+  border: 2px solid rgba(0,0,0,.35);
+  cursor:pointer;
+  font-weight: 1000;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.96);
+  background: linear-gradient(180deg, rgba(255,160,40,.95), rgba(190,90,10,.95));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 10px 18px rgba(0,0,0,.28);
+  font-size: 20px;
+}
+.cashBtn:hover{ filter: brightness(1.05); }
+
+@media (max-width: 1100px){
+  .actionbar{ grid-template-columns: 1fr; }
+  .cashBtn{ height: 64px; }
+  .sgbtn{ height: 66px; }
+  .selgrid{ grid-template-columns: repeat(4, minmax(70px, 1fr)); }
+}
+
+
+/* ===== v33: Mobile optimization for iPhone / Telegram WebApp ===== */
+:root{
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
+html, body{ height: 100%; }
+body{
+  padding-top: var(--safe-top);
+  padding-bottom: calc(var(--safe-bottom) + 12px);
+  -webkit-text-size-adjust: 100%;
+}
+
+.app, .chart-shell, .controls{ max-width: 100%; }
+
+@media (max-width: 600px){
+  .app{
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .topbar{ min-height: 56px; padding: 10px 12px; }
+  .brandText{ font-size: 16px; }
+  .chart-wrap{ padding: 8px 8px 0; }
+  .chart-body{ height: 300px; }
+
+  .actionbar{
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .ab-left{ display:flex; flex-direction: column; gap: 10px; }
+  .sugiubar{ order: -1; margin-top: 0; }
+  .sgbtn{ height: 82px; gap: 12px; }
+  .sgtxt{ font-size: 30px; }
+  .sgtri{ font-size: 28px; }
+
+  .selgrid{ grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .amt{ height: 44px; font-size: 16px; border-radius: 10px; }
+  .mini-action{ min-width: 120px; height: 40px; }
+
+  .portfolioVal{ font-size: 26px; }
+  .portfolioBox{ padding: 14px 12px; border-radius: 14px; }
+  .probetBtn{ height: 52px; border-radius: 14px; font-size: 16px; }
+
+  .cashBtn{ height: 64px; border-radius: 14px; font-size: 18px; }
+
+  .round-history{
+    padding: 12px 12px;
+    margin: 0 0 10px 0;
+    border-radius: 12px;
+  }
+  .hist-chip{ width: 28px; height: 22px; border-radius: 9px; }
+}
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brandText">BULL TRADE</div>
+      <div style="margin-left:auto; font-weight:950; letter-spacing:.3px; opacity:.9;">BALANCE: <span id="balance">100.00</span></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-shell">
+        <div class="chart-body">
+                    <canvas id="candleCanvas"></canvas>
+          <div id="countdown" class="countdown"></div>
+        </div>
+      </div>
+    </div>
+<div id="roundHistory" class="round-history bar" aria-label="round history"></div>
+    </div>
+    <div class="controls">
+  <div class="actionbar">
+    <!-- LEFT: bet selection + SU/GIÙ -->
+    <div class="ab-left">
+      <div class="selbox">
+        <div class="selhead">BET SELECTION</div>
+        <div class="selgrid">
+          <button class="amt" data-amt="0.1">0.10</button>
+<button class="amt" data-amt="0.5">0.50</button>
+<button class="amt" data-amt="1">1.00</button>
+<button class="amt" data-amt="2">2.00</button>
+<button class="amt" data-amt="5">5.00</button>
+<button class="amt" data-amt="10">10.00</button>
+<button class="amt" data-amt="15">15.00</button>
+<button class="amt" data-amt="20">20.00</button>
+        </div>
+        <div class="selactions">
+          <button class="mini-action" onclick="cancelBet()">CANCEL</button>
+        </div>
+      </div>
+
+      <div class="sugiubar" aria-label="SU GIU">
+        <button class="sgbtn su" onclick="onUp()">
+          <span class="sgtxt">LONG</span>
+          <span class="sgtri">▲</span>
+        </button>
+        <button class="sgbtn giu" onclick="onDown()">
+          <span class="sgtxt">SHORT</span>
+          <span class="sgtri">▼</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MIDDLE: PORTFOLIO + PROBET -->
+    <div class="ab-mid">
+      <div class="midhead">PORTFOLIO</div>
+      <div class="portfolioBox">
+        <div class="portfolioVal" id="portfolio">0.00</div>
+        <div class="portfolioNote">PRICE: 0.5 TON</div>
+      </div>
+      <button class="probetBtn" onclick="toggleInsurance()">PROBET</button>
+    </div>
+
+    <!-- RIGHT: CASHOUT -->
+    <div class="ab-right">
+      <div class="midhead">CASHOUT</div>
+      <div class="cashRow">
+        <button class="cashBtn half" onclick="cashoutHalf()">HALF</button>
+        <button class="cashBtn full" onclick="cashoutAll()">ALL</button>
+      </div>
+    </div>
+  </div>
+  <div class="foot"></div>
+</div>
+<script>
+
+// ===== v33: Telegram WebApp helpers (mobile feel) =====
+try{
+  if(window.Telegram && Telegram.WebApp){
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+  }
+}catch(e){}
+
+/* ===== Round-based engine (continuous price across rounds, frozen during betting) ===== */
+const canvas = document.getElementById('candleCanvas');
+const ctx = canvas.getContext('2d');
+const countdownEl = document.getElementById('countdown');
+const historyEl = document.getElementById('roundHistory');
+const STATE = {
+  insuranceOn: false,
+  // Chart viewport (zoom/pan)
+  view: { visible: 60, offset: 0 }, // offset in candles from the latest
+  _gesture: { pointers: new Map(), mode: null, startDist: 0, startVisible: 60, lastX: 0 },
+  portfolio: 0.00,
+  candles: [],
+  maxCandles: 90,
+  price: 100,
+  volatility: 0.85,
+  tickMs: 500,
+  // Round timing
+  runDurationMs: 30000,   // round duration
+  betCountdownSec: 7,     // betting window
+  phase: "RUN",           // RUN | COUNTDOWN
+  phaseStartedAt: 0,
+  // Round anchors
+  roundStartPrice: null,
+  roundEndPrice: null,
+  // History (last N rounds)
+  history: [],
+  historyMax: 12,
+  // Betting
+  balance: 100.00,
+  betAmount: 1.00,
+  pendingBet: null, // {side, amount}
+  activeBet: null   // {side, amount, entry}
+};
+function updateBalance(){
+  const el = document.getElementById('balance');
+  if(el) el.textContent = STATE.balance.toFixed(2);
+  const p = document.getElementById('portfolio');
+  if(p) p.textContent = (STATE.portfolio || 0).toFixed(2);
+}
+function randn(){
+  let u=0,v=0;
+  while(!u)u=Math.random();
+  while(!v)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+// Short/controlled wicks (not toothpicks)
+function makeNextCandle(prev){
+  const open = prev;
+  const drift = randn() * STATE.volatility;
+  const close = open + drift;
+  const body = Math.max(0.10, Math.abs(close-open));
+  const longWick = Math.random() < 0.18;
+  const wickMult = longWick ? (1.4 + Math.random()*0.9) : (0.35 + Math.random()*0.65);
+  const cap = STATE.volatility * 2.2 + 0.8;
+  const upWick = Math.min(cap, body * wickMult * (0.7 + Math.random()*0.8));
+  const dnWick = Math.min(cap, body * wickMult * (0.7 + Math.random()*0.8));
+  return {
+    open,
+    close,
+    high: Math.max(open,close) + upWick,
+    low:  Math.min(open,close) - dnWick
+  };
+}
+function seed(){
+  STATE.candles=[];
+  let p=STATE.price;
+  for(let i=0;i<STATE.maxCandles;i++){
+    const c=makeNextCandle(p);
+    STATE.candles.push(c);
+    p=c.close;
+  }
+  STATE.price=p;
+  STATE.roundStartPrice = STATE.candles[STATE.candles.length-1].close;
+}
+function resize(){
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.floor(r.width * dpr);
+  canvas.height = Math.floor(r.height * dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+/* ---- Drawing (candles + grid + last price tag) ---- */
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  if (w < 2 * r) r = w / 2;
+  if (h < 2 * r) r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+function draw(){
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0,0,w,h);
+  const bg = ctx.createLinearGradient(0,0,0,h);
+  bg.addColorStop(0, 'rgba(0,0,0,.35)');
+  bg.addColorStop(1, 'rgba(0,0,0,.15)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,w,h);
+  if(!STATE.candles.length) return;
+  // --- viewport: allow zoom/pan like exchanges ---
+  const vw = STATE.view || { visible: STATE.maxCandles, offset: 0 };
+  const total = STATE.candles.length;
+  const endIdx = Math.max(0, Math.min(total, total - (vw.offset || 0)));
+  const vis = Math.max(12, Math.min(STATE.maxCandles, Math.floor(vw.visible || STATE.maxCandles)));
+  const startIdx = Math.max(0, endIdx - vis);
+  const candles = STATE.candles.slice(startIdx, endIdx);
+  if(!candles.length) return;
+  let minP = Infinity, maxP = -Infinity;
+  for(const c of candles){
+    minP = Math.min(minP, c.low);
+    maxP = Math.max(maxP, c.high);
+  }
+const pad = (maxP - minP) * 0.08 + 0.01;
+  minP -= pad; maxP += pad;
+  const leftPad = 14, rightPad = 74, topPad = 12, botPad = 18;
+  const plotW = w - leftPad - rightPad;
+  const plotH = h - topPad - botPad;
+  function y(p){
+    return topPad + (maxP - p) / (maxP - minP) * plotH;
+  }
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,.07)';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=6;i++){
+    const yy = topPad + (plotH/6)*i;
+    ctx.beginPath();
+    ctx.moveTo(leftPad, yy);
+    ctx.lineTo(leftPad + plotW, yy);
+    ctx.stroke();
+  }
+  for(let i=0;i<=10;i++){
+    const xx = leftPad + (plotW/10)*i;
+    ctx.beginPath();
+    ctx.moveTo(xx, topPad);
+    ctx.lineTo(xx, topPad + plotH);
+    ctx.stroke();
+  }
+  const n = candles.length;
+  const spacing = plotW / n;
+  const bodyW = Math.max(4, Math.min(18, spacing * 0.80));
+  for(let i=0;i<n;i++){
+    const c = candles[i];
+    const cx = leftPad + spacing*i + spacing/2;
+    const yOpen = y(c.open);
+    const yClose = y(c.close);
+    const yHigh = y(c.high);
+    const yLow  = y(c.low);
+    const up = c.close >= c.open;
+    // Wick
+    ctx.strokeStyle = up ? 'rgba(31,207,102,.95)' : 'rgba(217,59,59,.95)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(cx, yHigh);
+    ctx.lineTo(cx, yLow);
+    ctx.stroke();
+    // Body
+    const top = Math.min(yOpen, yClose);
+    const bot = Math.max(yOpen, yClose);
+    const bodyH = Math.max(2, bot - top);
+    ctx.fillStyle = up ? 'rgba(31,207,102,1)' : 'rgba(217,59,59,1)';
+    ctx.strokeStyle = 'rgba(0,0,0,.35)';
+    ctx.lineWidth = 1;
+    roundRect(ctx, cx - bodyW/2, top, bodyW, bodyH, 1.5, true, true);
+  }
+  // Last price line + right tag
+  const last = candles[candles.length - 1];
+  const lastY = y(last.close);
+  ctx.strokeStyle = 'rgba(255,255,255,.22)';
+  ctx.setLineDash([6,6]);
+  ctx.beginPath();
+  ctx.moveTo(leftPad, lastY);
+  ctx.lineTo(leftPad + plotW, lastY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const label = last.close.toFixed(2);
+  ctx.font = '900 14px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+  const tw = ctx.measureText(label).width;
+  const tagW = tw + 18;
+  const tagH = 30;
+  const xTag = leftPad + plotW + 10;
+  const yTag = Math.max(topPad, Math.min(topPad + plotH - tagH, lastY - tagH/2));
+  const tagUp = last.close >= last.open;
+  ctx.fillStyle = tagUp ? 'rgba(31,207,102,.92)' : 'rgba(217,59,59,.92)';
+  roundRect(ctx, xTag, yTag, tagW, tagH, 10, true, false);
+  ctx.fillStyle = 'rgba(0,0,0,.86)';
+  ctx.fillText(label, xTag + 9, yTag + 20);
+}
+/* ---- History ---- */
+function renderHistory(){
+  if(!historyEl) return;
+  historyEl.innerHTML = "";
+  for(const item of STATE.history){
+    const d = document.createElement('div');
+    d.className = "hist-chip " + (item.dir === "UP" ? "up" : "down");
+    const tri = document.createElement('div');
+    tri.className = "tri";
+    tri.textContent = item.dir === "UP" ? "▲" : "▼";
+    d.appendChild(tri);
+    historyEl.appendChild(d);
+  }
+}
+function pushHistory(dir){
+  STATE.history.push({dir});
+  if(STATE.history.length > STATE.historyMax) STATE.history.shift();
+  renderHistory();
+}
+/* ---- Betting + Rounds ---- */
+function clampAmount(v){
+  v = Math.max(0.1, Math.min(20, Number(v)));
+  return Math.round(v * 100) / 100;
+}
+function setAmount(v){
+  const val = clampAmount(v);
+  STATE.betAmount = val;
+  document.querySelectorAll('.amt').forEach(b=>{
+    const a = Number(b.getAttribute('data-amt'));
+    b.classList.toggle('is-active', Math.abs(a - val) < 0.0001);
+  });
+}
+function clearBetLabels(){
+  const aL = document.getElementById('amountLong');
+  const aS = document.getElementById('amountShort');
+  if(aL) aL.textContent = "";
+  if(aS) aS.textContent = "";
+}
+function placeBet(side){
+  if(STATE.phase !== "COUNTDOWN") return;
+  const amt = clampAmount(STATE.betAmount || 0.1);
+  if(STATE.balance < amt) return;
+  STATE.pendingBet = { side, amount: amt };
+  clearBetLabels();
+  if(side === "LONG"){
+    const el = document.getElementById('amountLong');
+    if(el) el.textContent = amt.toFixed(2);
+  }else{
+    const el = document.getElementById('amountShort');
+    if(el) el.textContent = amt.toFixed(2);
+  }
+}
+function applyPendingBetAtRoundStart(){
+  if(!STATE.pendingBet) return;
+  const { side, amount } = STATE.pendingBet;
+  if(STATE.balance < amount){ STATE.pendingBet = null; clearBetLabels(); return; }
+  STATE.balance = Math.max(0, STATE.balance - amount);
+  updateBalance();
+  STATE.activeBet = { side, amount, entry: STATE.roundStartPrice };
+  STATE.pendingBet = null;
+}
+function resolveActiveBet(){
+  if(!STATE.activeBet) return;
+  const end = STATE.roundEndPrice;
+  const entry = STATE.activeBet.entry;
+  const amt = STATE.activeBet.amount;
+  const side = STATE.activeBet.side;
+  let win = false;
+  if(side === "LONG" && end > entry) win = true;
+  if(side === "SHORT" && end < entry) win = true;
+  // Portfolio shows the current bet result: stake (during bet) -> doubled on win -> 0 on loss.
+  STATE.portfolio = win ? (amt * 2) : 0;
+  updateBalance();
+  STATE.activeBet = null;
+  clearBetLabels();
+}
+function startCountdown(){
+  STATE.phase = "COUNTDOWN";
+  STATE.phaseStartedAt = Date.now();
+  let n = STATE.betCountdownSec;
+  countdownEl.style.display="flex";
+  countdownEl.textContent = String(n);
+  const t = setInterval(()=>{
+    n -= 1;
+    if(n < 0){
+      clearInterval(t);
+      countdownEl.style.display="none";
+      STATE.phase = "RUN";
+      STATE.phaseStartedAt = Date.now();
+      const last = STATE.candles[STATE.candles.length - 1];
+      STATE.roundStartPrice = last ? last.close : STATE.price;
+      applyPendingBetAtRoundStart();
+      return;
+    }
+    countdownEl.textContent = String(n);
+  }, 1000);
+}
+function endRound(){
+  const last = STATE.candles[STATE.candles.length - 1];
+  STATE.roundEndPrice = last ? last.close : STATE.price;
+  if(STATE.roundStartPrice != null && STATE.roundEndPrice != null){
+    if(STATE.roundEndPrice > STATE.roundStartPrice) pushHistory("UP");
+    else pushHistory("DOWN");
+  }
+  resolveActiveBet();
+  startCountdown();
+}
+function tick(){
+  if(STATE.phase === "RUN"){
+    const next = makeNextCandle(STATE.price);
+    STATE.candles.push(next);
+    STATE.price = next.close;
+    if(STATE.candles.length > STATE.maxCandles) STATE.candles.shift();
+    // keep viewport offset valid
+    if(STATE.view){
+      const maxOff = Math.max(0, STATE.candles.length - 1);
+      STATE.view.offset = Math.max(0, Math.min(maxOff, STATE.view.offset || 0));
+    }
+    draw();
+    if(Date.now() - STATE.phaseStartedAt >= STATE.runDurationMs){
+      endRound();
+    }
+  }
+}
+/* ---- UI wiring ---- */
+function wireAmountButtons(){
+  document.querySelectorAll('.amt').forEach(btn=>{
+    btn.addEventListener('click', () => setAmount(btn.getAttribute('data-amt')));
+  });
+  setAmount(1.00);
+  updateBalance();
+  renderHistory();
+}
+function start(){
+  seed();
+  resize();
+  draw();
+  installPanZoom();
+  const last = STATE.candles[STATE.candles.length - 1];
+  STATE.roundStartPrice = last ? last.close : STATE.price;
+  wireAmountButtons();
+  STATE.phase = "RUN";
+  STATE.phaseStartedAt = Date.now();
+  setInterval(tick, STATE.tickMs);
+}
+window.addEventListener('resize', () => { resize(); draw(); });
+
+/* ===== v35: Zoom/Pan gestures (mobile + desktop) ===== */
+function clampView(){
+  if(!STATE.view) STATE.view = { visible: STATE.maxCandles, offset: 0 };
+  STATE.view.visible = Math.max(12, Math.min(STATE.maxCandles, Math.floor(STATE.view.visible || 60)));
+  const maxOffset = Math.max(0, STATE.candles.length - 1);
+  STATE.view.offset = Math.max(0, Math.min(maxOffset, Math.floor(STATE.view.offset || 0)));
+}
+
+function panByCandles(delta){
+  clampView();
+  STATE.view.offset += delta;
+  clampView();
+  draw();
+}
+
+function zoomTo(visible){
+  clampView();
+  const prev = STATE.view.visible;
+  STATE.view.visible = visible;
+  clampView();
+  // If user is at "live" end, keep it live.
+  // Otherwise keep right edge anchored (best-effort).
+  if((STATE.view.offset || 0) === 0){
+    // nothing
+  }else{
+    const diff = (STATE.view.visible - prev);
+    STATE.view.offset = Math.max(0, (STATE.view.offset || 0) + Math.floor(diff/2));
+  }
+  clampView();
+  draw();
+}
+
+function installPanZoom(){
+  const el = canvas;
+  if(!el) return;
+
+  el.style.touchAction = "none"; // allow pinch/drag
+  const g = STATE._gesture;
+
+  function getDist(){
+    const pts = Array.from(g.pointers.values());
+    if(pts.length < 2) return 0;
+    const dx = pts[0].x - pts[1].x;
+    const dy = pts[0].y - pts[1].y;
+    return Math.hypot(dx, dy);
+  }
+
+  el.addEventListener('pointerdown', (e)=>{
+    el.setPointerCapture(e.pointerId);
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if(g.pointers.size === 1){
+      g.mode = "pan";
+      g.lastX = e.clientX;
+    }else if(g.pointers.size === 2){
+      g.mode = "pinch";
+      g.startDist = getDist();
+      clampView();
+      g.startVisible = STATE.view.visible;
+    }
+  });
+
+  el.addEventListener('pointermove', (e)=>{
+    if(!g.pointers.has(e.pointerId)) return;
+    g.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if(g.mode === "pinch" && g.pointers.size >= 2){
+      const dist = getDist();
+      if(dist <= 0 || g.startDist <= 0) return;
+      // pinch out => zoom in (fewer candles)
+      const ratio = g.startDist / dist;
+      const target = Math.round(g.startVisible * ratio);
+      zoomTo(target);
+      return;
+    }
+
+    if(g.mode === "pan" && g.pointers.size === 1){
+      const dx = e.clientX - g.lastX;
+      g.lastX = e.clientX;
+      // Drag left => go to past (increase offset)
+      const width = el.getBoundingClientRect().width || 1;
+      clampView();
+      const candlesPerPx = (STATE.view.visible || 60) / width;
+      const deltaCandles = Math.round(-dx * candlesPerPx);
+      if(deltaCandles !== 0) panByCandles(deltaCandles);
+    }
+  });
+
+  function endPointer(e){
+    if(g.pointers.has(e.pointerId)) g.pointers.delete(e.pointerId);
+    if(g.pointers.size === 0){
+      g.mode = null;
+    }else if(g.pointers.size === 1){
+      g.mode = "pan";
+      const pt = Array.from(g.pointers.values())[0];
+      g.lastX = pt.x;
+    }
+  }
+
+  el.addEventListener('pointerup', endPointer);
+  el.addEventListener('pointercancel', endPointer);
+
+  // Mouse wheel zoom (desktop / trackpad)
+  el.addEventListener('wheel', (e)=>{
+    e.preventDefault();
+    clampView();
+    const step = Math.max(2, Math.round((STATE.view.visible || 60) * 0.08));
+    if(e.deltaY < 0) zoomTo((STATE.view.visible || 60) - step);
+    else zoomTo((STATE.view.visible || 60) + step);
+  }, { passive: false });
+
+  // Double tap / double click: return to live
+  let lastTap = 0;
+  el.addEventListener('click', ()=>{
+    const now = Date.now();
+    if(now - lastTap < 280){
+      clampView();
+      STATE.view.offset = 0;
+      draw();
+    }
+    lastTap = now;
+  });
+}
+
+start();
+function onUp(){ placeBet("LONG"); }
+function onDown(){ placeBet("SHORT"); }
+function cancelBet(){
+  STATE.pendingBet = null;
+  STATE.portfolio = 0;
+  updateBalance();
+  setAmount(0.1);
+}
+
+function toggleInsurance(){
+  STATE.insuranceOn = !STATE.insuranceOn;
+  const btn = document.querySelector('.probetBtn');
+  if(btn){ btn.classList.toggle('is-on', STATE.insuranceOn); }
+}
+function doubleBet(){ setAmount(Math.min(20, (STATE.betAmount || 0.1) * 2)); }
+
+function cashoutHalf(){
+  const v = Number(STATE.portfolio || 0);
+  if(v <= 0) return;
+  const half = Math.round((v / 2) * 100) / 100;
+  STATE.balance += half;
+  STATE.portfolio = Math.round((v - half) * 100) / 100;
+  updateBalance();
+}
+function cashoutAll(){
+  const v = Number(STATE.portfolio || 0);
+  if(v <= 0) return;
+  STATE.balance += v;
+  STATE.portfolio = 0;
+  updateBalance();
+}
+</script>
+</body>
+</html>
