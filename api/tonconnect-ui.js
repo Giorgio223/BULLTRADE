@@ -1,36 +1,27 @@
-// api/tonconnect-ui.js
-// Same-origin proxy for TonConnect UI to avoid Telegram in-app browsers blocking CDNs.
-
 export default async function handler(req, res) {
   try {
-    const sources = [
-      "https://cdn.jsdelivr.net/npm/@tonconnect/ui@latest/dist/tonconnect-ui.min.js",
-      "https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"
-    ];
+    // Берём UMD-бандл TonConnect UI (он как раз создаёт глобал в window)
+    const upstream = await fetch(
+      "https://cdn.jsdelivr.net/npm/@tonconnect/ui@0.2.0/dist/tonconnect-ui.min.js",
+      { redirect: "follow" }
+    );
 
-    let lastErr = null;
-
-    for (const url of sources) {
-      try {
-        const r = await fetch(url, {
-          headers: { "User-Agent": "bulltrade-tonconnect-proxy" }
-        });
-        if (!r.ok) {
-          lastErr = new Error(`Fetch failed ${r.status}`);
-          continue;
-        }
-
-        const js = await r.text();
-        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-        res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
-        return res.status(200).send(js);
-      } catch (e) {
-        lastErr = e;
-      }
+    if (!upstream.ok) {
+      res.status(upstream.status).send(`// TonConnect upstream error: ${upstream.status}`);
+      return;
     }
 
-    return res.status(502).send(`Proxy fetch failed: ${lastErr ? lastErr.message : "unknown"}`);
+    let js = await upstream.text();
+
+    // Убираем sourcemap, чтобы не было 404 на *.map (и лишних предупреждений)
+    js = js.replace(/\/\/# sourceMappingURL=.*$/gm, "");
+
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    // Кэшируем надолго (быстро для всех юзеров)
+    res.setHeader("Cache-Control", "public, max-age=86400");
+
+    res.status(200).send(js);
   } catch (e) {
-    return res.status(500).send("Proxy error");
+    res.status(500).send(`// TonConnect proxy failed: ${String(e)}`);
   }
 }
