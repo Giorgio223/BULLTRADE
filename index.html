@@ -942,6 +942,63 @@ body{
 
 </head>
 <body>
+
+<!-- TONCONNECT DEBUG PANEL -->
+<style>
+#tc-debug {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 40%;
+  background: rgba(0,0,0,0.85);
+  color: #0f0;
+  font-family: monospace;
+  font-size: 12px;
+  overflow-y: auto;
+  z-index: 99999;
+  padding: 8px;
+}
+#tc-debug b { color: #6cf; }
+</style>
+<div id="tc-debug"><b>TonConnect debug log</b><br></div>
+<script>
+(function(){
+  const el = document.getElementById("tc-debug");
+  function log(msg){
+    const line = document.createElement("div");
+    line.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+    console.log("[TC DEBUG]", msg);
+  }
+
+  window.__tcDebugLog = log;
+
+  log("Debug panel initialized");
+  log("location.href = " + location.href);
+  log("userAgent = " + navigator.userAgent);
+
+  document.addEventListener("DOMContentLoaded", () => {
+    log("DOMContentLoaded");
+  });
+
+  window.addEventListener("load", () => {
+    log("window load");
+  });
+
+  const origAppend = document.head.appendChild.bind(document.head);
+  document.head.appendChild = function(node){
+    if(node.tagName === "SCRIPT"){
+      log("Inject script: " + node.src);
+      node.addEventListener("load", () => log("Script loaded: " + node.src));
+      node.addEventListener("error", () => log("Script ERROR: " + node.src));
+    }
+    return origAppend(node);
+  };
+})();
+</script>
+
   <div class="app">
     <div class="topbar">
       <div class="brandText">BULL TRADE</div>
@@ -1850,7 +1907,7 @@ async function waitTonConnectUI(timeoutMs = 12000){
         (window.TonConnectUI && window.TonConnectUI.TonConnectUI)
       ));
 
-    if(hasGlobal) return true;
+    if(hasGlobal){ window.__tcDebugLog && __tcDebugLog("TonConnect global detected"); return true; }
     if(Date.now() - start > timeoutMs) return false;
     await new Promise(r => setTimeout(r, 50));
   }
@@ -1896,10 +1953,14 @@ async function connectTonWallet(){
     (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
     (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI));
 
+  window.__tcDebugLog && __tcDebugLog("waitTonConnectUI result = " + ok);
+  window.__tcDebugLog && __tcDebugLog("TonUI = " + (TonUI ? "FOUND" : "NULL"));
+
   if(ok && TonUI){
 
     if(!window.__tonUI){
-      window.__tonUI = new TonUI({ manifestUrl });
+      window.__tcDebugLog && __tcDebugLog("Creating TonConnectUI with manifest: " + manifestUrl);
+    window.__tonUI = new TonUI({ manifestUrl });
 
       window.__tonUI.onStatusChange(async (wallet)=>{
         const raw = wallet?.account?.address || "";
