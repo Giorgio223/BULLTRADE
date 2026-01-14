@@ -1187,7 +1187,7 @@ function startCountdown(){
       countdownEl.style.display="none";
       STATE.phase = "RUN";
       STATE.phaseStartedAt = Date.now();
-      const last = STATE.candles[STATE.candles.length - 1];
+      const last = candles[candles.length - 1];
       STATE.roundStartPrice = last ? last.close : STATE.price;
       applyPendingBetAtRoundStart();
       return;
@@ -1196,7 +1196,7 @@ function startCountdown(){
   }, 1000);
 }
 function endRound(){
-  const last = STATE.candles[STATE.candles.length - 1];
+  const last = candles[candles.length - 1];
   STATE.roundEndPrice = last ? last.close : STATE.price;
   if(STATE.roundStartPrice != null && STATE.roundEndPrice != null){
     if(STATE.roundEndPrice > STATE.roundStartPrice) pushHistory("UP");
@@ -1236,7 +1236,7 @@ function start(){
   resize();
   draw();
   installPanZoom();
-  const last = STATE.candles[STATE.candles.length - 1];
+  const last = candles[candles.length - 1];
   STATE.roundStartPrice = last ? last.close : STATE.price;
   wireAmountButtons();
   STATE.phase = "RUN";
