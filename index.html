@@ -1,47 +1,6 @@
 <!doctype html>
 <html lang="ru">
 <head>
-
-<!-- HEAD DEBUG (runs before TonConnect loader) -->
-<script>
-(function(){
-  window.__tcDbg = window.__tcDbg || [];
-  function push(msg){
-    window.__tcDbg.push("[" + new Date().toLocaleTimeString() + "] " + msg);
-    console.log("[TC HEAD]", msg);
-  }
-  window.__tcHeadLog = push;
-
-  window.addEventListener("error", function(e){
-    push("window.onerror: " + (e && e.message ? e.message : e));
-  });
-
-  window.addEventListener("unhandledrejection", function(e){
-    push("unhandledrejection: " + (e && e.reason ? (e.reason.stack||e.reason) : e));
-  });
-
-  push("head debug init");
-  push("href=" + location.href);
-  push("ua=" + navigator.userAgent);
-
-  window.addEventListener("load", function(){
-    const g1 = (typeof TonConnectUI !== "undefined");
-    const g2 = !!(window.TonConnectUI);
-    const g3 = !!(window.TonConnectUI && window.TonConnectUI.TonConnectUI);
-    push("post-load globals: TonConnectUI=" + g1 + " window.TonConnectUI=" + g2 + " window.TonConnectUI.TonConnectUI=" + g3);
-    try{
-      const keys = Object.keys(window).filter(k => k.toLowerCase().includes("ton"));
-      push("window keys containing 'ton' = " + JSON.stringify(keys.slice(0,50)));
-      push("typeof TonConnectUI = " + (typeof TonConnectUI));
-      push("typeof window.TonConnectUI = " + (typeof window.TonConnectUI));
-    }catch(e){
-      push("diagnostics error: " + (e && (e.stack||e.message) ? (e.stack||e.message) : e));
-    }
-
-  });
-})();
-</script>
-
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BULL TRADE</title>
@@ -958,46 +917,22 @@ body{
 
 
 
-
-<!-- TonConnect UI loader (instrumented) -->
+<!-- TonConnect UI loader (self-hosted via API, Telegram-safe) -->
 <script>
 (function () {
   const urls = [
-    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768442903"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js"
   ];
-
-  const log = (m) => (window.__tcHeadLog ? window.__tcHeadLog(m) : console.log("[TC LOADER]", m));
-
-  async function preflight(url){
-    try{
-      const r = await fetch(url, { method: "GET", cache: "no-store" });
-      log("preflight fetch " + url + " -> " + r.status + " " + r.statusText);
-      const t = await r.text();
-      log("preflight first100=" + t.slice(0,100).replace(/\s+/g," "));
-      if (/^\s*<!doctype html/i.test(t) || /<html/i.test(t)) {
-        log("WARNING: response looks like HTML, not JS");
-      }
-      window.__tcPreflight = { url, status: r.status, head: t.slice(0,300) };
-    }catch(e){
-      log("preflight ERROR " + url + " -> " + (e && (e.stack||e.message) ? (e.stack||e.message) : e));
-    }
-  }
 
   function loadNext(i) {
     if (i >= urls.length) {
-      log("TonConnect UI не загрузился (all sources failed)");
       console.error("TonConnect UI не загрузился");
       return;
     }
-    const url = urls[i];
-    log("trying script: " + url);
-
-    preflight(url);
-
     const s = document.createElement("script");
-    s.src = url;
-    s.onload = () => log("script onload: " + url);
-    s.onerror = () => log("script onerror: " + url);
+    s.src = urls[i];
+    s.onload = () => console.log("TonConnect UI loaded:", urls[i]);
+    s.onerror = () => loadNext(i + 1);
     document.head.appendChild(s);
   }
 
@@ -1007,59 +942,6 @@ body{
 
 </head>
 <body>
-
-<!-- DEBUG PANEL -->
-<style>
-#tc-debug {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  max-height: 45%;
-  background: rgba(0,0,0,0.88);
-  color: #0f0;
-  font-family: monospace;
-  font-size: 12px;
-  overflow-y: auto;
-  z-index: 99999;
-  padding: 8px;
-}
-#tc-debug b { color: #6cf; }
-#tc-debug button{ margin:6px 6px 6px 0; }
-</style>
-<div id="tc-debug"><b>TonConnect debug</b> <button id="tc-copy">Copy</button><br></div>
-<script>
-(function(){
-  const el = document.getElementById("tc-debug");
-  function add(line){
-    const d = document.createElement("div");
-    d.textContent = line;
-    el.appendChild(d);
-    el.scrollTop = el.scrollHeight;
-  }
-  function flush(){
-    const arr = window.__tcDbg || [];
-    el.innerHTML = "<b>TonConnect debug</b> <button id=\"tc-copy\">Copy</button><br>";
-    arr.forEach(add);
-    if(window.__tcPreflight){
-      add("preflight.summary: " + JSON.stringify(window.__tcPreflight));
-    }
-  }
-  flush();
-  setInterval(flush, 500);
-
-  document.addEventListener("click", (e)=>{
-    if(e.target && e.target.id==="tc-copy"){
-      const arr = window.__tcDbg || [];
-      const txt = arr.join("\n") + (window.__tcPreflight ? ("\nPRE:" + JSON.stringify(window.__tcPreflight)) : "");
-      if(navigator.clipboard && navigator.clipboard.writeText){
-        navigator.clipboard.writeText(txt);
-      }
-    }
-  });
-})();
-</script>
-
   <div class="app">
     <div class="topbar">
       <div class="brandText">BULL TRADE</div>
@@ -1964,11 +1846,12 @@ async function waitTonConnectUI(timeoutMs = 12000){
       (typeof TonConnectUI !== "undefined") ||
       (typeof window !== "undefined" && (
         window.TonConnectUI ||
+        (window.TonConnectUI && window.TonConnectUI.TonConnectUI) ||
         (window.tonconnect && window.tonconnect.ui) ||
-        (window.TonConnectUI && window.TonConnectUI.TonConnectUI)
+        window.TON_CONNECT_UI ||
+        (window.TON_CONNECT_UI && (window.TON_CONNECT_UI.TonConnectUI || window.TON_CONNECT_UI.default))
       ));
-
-    if(hasGlobal) return true;
+if(hasGlobal) return true;
     if(Date.now() - start > timeoutMs) return false;
     await new Promise(r => setTimeout(r, 50));
   }
@@ -2011,8 +1894,11 @@ async function connectTonWallet(){
   // 2) window.TonConnectUI (UMD)
   // 3) window.TonConnectUI.TonConnectUI (некоторые сборки)
   const TonUI =
+    // classic globals
     (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
-    (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI));
+    (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI)) ||
+    // TON_CONNECT_UI global (v2 builds often expose this)
+    (window.TON_CONNECT_UI && (window.TON_CONNECT_UI.TonConnectUI || window.TON_CONNECT_UI.default || window.TON_CONNECT_UI));
 
   if(ok && TonUI){
 
