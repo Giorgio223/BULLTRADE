@@ -1086,17 +1086,7 @@ body{
 .ui-modal-actions button:active{ transform: scale(.99); }
 
 </style>
-  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js">
-
-  const s = String(ton).replace(",", ".").trim();
-  if(!s) return "0";
-  const parts = s.split(".");
-  const whole = (parts[0] || "").replace(/\D/g, "") || "0";
-  const frac = ((parts[1] || "").replace(/\D/g, "")).padEnd(9, "0").slice(0, 9);
-  return whole + frac;
-};
-
-</script>
+  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 
 
 
@@ -1276,7 +1266,6 @@ window.__DBG_ADD = null;
 
 <script>
 // === TonConnect connect helper (no double connect) ===
-<script>
 function normalizeSendArgs(args){
   // supports: (to, amountNano, payload) OR ({to, amountNano, payload})
   if(args.length === 1 && args[0] && typeof args[0] === "object"){
