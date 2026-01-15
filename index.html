@@ -963,7 +963,7 @@ body{
 <script>
 (function () {
   const urls = [
-    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768445526"
   ];
 
   function loadNext(i) {
@@ -994,6 +994,52 @@ window.tonToNanoStr = function(ton){
   const frac = ((parts[1] || "").replace(/\D/g, "")).padEnd(9, "0").slice(0, 9);
   return whole + frac;
 };
+</script>
+
+<script>
+// === TonConnect sendTransaction helper ===
+window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
+  if(!window.__tonUI){
+    throw new Error("TonConnect UI is not initialized (__tonUI missing)");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const tx = {
+    validUntil: now + validUntilSec,
+    messages: [
+      {
+        address: to,
+        amount: String(amountNano),
+      }
+    ]
+  };
+  if(payload){
+    // TonConnect supports payload as base64 (depending on wallet). We'll pass through.
+    tx.messages[0].payload = payload;
+  }
+  return await window.__tonUI.sendTransaction(tx);
+};
+</script>
+
+
+
+
+<script>
+// runtime a11y fix: never hide focused modal via aria-hidden
+document.addEventListener("DOMContentLoaded", ()=>{
+  const b = document.getElementById("uiModalBackdrop");
+  if(b){
+    b.removeAttribute("aria-hidden");
+    // observe attribute changes and remove aria-hidden if someone sets it
+    const mo = new MutationObserver((muts)=>{
+      for(const m of muts){
+        if(m.type === "attributes" && m.attributeName === "aria-hidden"){
+          b.removeAttribute("aria-hidden");
+        }
+      }
+    });
+    mo.observe(b, { attributes: true });
+  }
+});
 </script>
 
 </head>
