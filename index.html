@@ -2529,5 +2529,43 @@ async function toggleTonWallet(opts = {}) {
 }
 // ================= END SAFE TONCONNECT PATCH =================
 </script>
+<script>
+// ================= TONCONNECT OVERRIDES (FIX DOUBLE CONNECT) =================
+(function(){
+  // hard override connection checks used by older code paths
+  window.__tc_connecting2 = window.__tc_connecting2 || false;
+
+  window.__isConnected = function(ui){
+    try { return !!(ui && (ui.connected || ui.wallet)); } catch(e){ return false; }
+  };
+
+  window.__ensureConnected = async function(ui, opts = {}){
+    if (!ui) throw new Error("TonConnect UI not ready");
+    if (window.__isConnected(ui)) return ui.wallet;
+    if (window.__tc_connecting2) return null;
+    window.__tc_connecting2 = true;
+    try{
+      // call TonConnect UI connect
+      await ui.connectWallet(opts);
+      return ui.wallet;
+    } finally {
+      window.__tc_connecting2 = false;
+    }
+  };
+
+  // override connectTonWallet to go through __ensureConnected
+  window.connectTonWallet = async function(opts = {}){
+    await waitTonConnectUI();
+    const ui = await __getTonUI();
+    await window.__ensureConnected(ui, opts);
+    const addr = ui?.wallet?.account?.address || ui?.account?.address || "";
+    if (addr) {
+      try { localStorage.setItem(WALLET_KEY, addr); } catch(e){}
+      try { setWalletUI(addr); } catch(e){}
+    }
+  };
+})();
+// ================= END TONCONNECT OVERRIDES =================
+</script>
 </body>
 </html>
