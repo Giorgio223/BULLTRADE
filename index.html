@@ -1,6 +1,38 @@
 <!doctype html>
 <html lang="ru">
 <head>
+
+<!-- HEAD DEBUG (runs before TonConnect loader) -->
+<script>
+(function(){
+  window.__tcDbg = window.__tcDbg || [];
+  function push(msg){
+    window.__tcDbg.push("[" + new Date().toLocaleTimeString() + "] " + msg);
+    console.log("[TC HEAD]", msg);
+  }
+  window.__tcHeadLog = push;
+
+  window.addEventListener("error", function(e){
+    push("window.onerror: " + (e && e.message ? e.message : e));
+  });
+
+  window.addEventListener("unhandledrejection", function(e){
+    push("unhandledrejection: " + (e && e.reason ? (e.reason.stack||e.reason) : e));
+  });
+
+  push("head debug init");
+  push("href=" + location.href);
+  push("ua=" + navigator.userAgent);
+
+  window.addEventListener("load", function(){
+    const g1 = (typeof TonConnectUI !== "undefined");
+    const g2 = !!(window.TonConnectUI);
+    const g3 = !!(window.TonConnectUI && window.TonConnectUI.TonConnectUI);
+    push("post-load globals: TonConnectUI=" + g1 + " window.TonConnectUI=" + g2 + " window.TonConnectUI.TonConnectUI=" + g3);
+  });
+})();
+</script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BULL TRADE</title>
@@ -917,22 +949,46 @@ body{
 
 
 
-<!-- TonConnect UI loader (self-hosted via API, Telegram-safe) -->
+
+<!-- TonConnect UI loader (instrumented) -->
 <script>
 (function () {
   const urls = [
     "https://bulltrade-three.vercel.app/api/tonconnect-ui.js"
   ];
 
+  const log = (m) => (window.__tcHeadLog ? window.__tcHeadLog(m) : console.log("[TC LOADER]", m));
+
+  async function preflight(url){
+    try{
+      const r = await fetch(url, { method: "GET", cache: "no-store" });
+      log("preflight fetch " + url + " -> " + r.status + " " + r.statusText);
+      const t = await r.text();
+      log("preflight first100=" + t.slice(0,100).replace(/\s+/g," "));
+      if (/^\s*<!doctype html/i.test(t) || /<html/i.test(t)) {
+        log("WARNING: response looks like HTML, not JS");
+      }
+      window.__tcPreflight = { url, status: r.status, head: t.slice(0,300) };
+    }catch(e){
+      log("preflight ERROR " + url + " -> " + (e && (e.stack||e.message) ? (e.stack||e.message) : e));
+    }
+  }
+
   function loadNext(i) {
     if (i >= urls.length) {
+      log("TonConnect UI не загрузился (all sources failed)");
       console.error("TonConnect UI не загрузился");
       return;
     }
+    const url = urls[i];
+    log("trying script: " + url);
+
+    preflight(url);
+
     const s = document.createElement("script");
-    s.src = urls[i];
-    s.onload = () => console.log("TonConnect UI loaded:", urls[i]);
-    s.onerror = () => loadNext(i + 1);
+    s.src = url;
+    s.onload = () => log("script onload: " + url);
+    s.onerror = () => log("script onerror: " + url);
     document.head.appendChild(s);
   }
 
@@ -943,15 +999,15 @@ body{
 </head>
 <body>
 
-<!-- TONCONNECT DEBUG PANEL -->
+<!-- DEBUG PANEL -->
 <style>
 #tc-debug {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  max-height: 40%;
-  background: rgba(0,0,0,0.85);
+  max-height: 45%;
+  background: rgba(0,0,0,0.88);
   color: #0f0;
   font-family: monospace;
   font-size: 12px;
@@ -960,42 +1016,38 @@ body{
   padding: 8px;
 }
 #tc-debug b { color: #6cf; }
+#tc-debug button{ margin:6px 6px 6px 0; }
 </style>
-<div id="tc-debug"><b>TonConnect debug log</b><br></div>
+<div id="tc-debug"><b>TonConnect debug</b> <button id="tc-copy">Copy</button><br></div>
 <script>
 (function(){
   const el = document.getElementById("tc-debug");
-  function log(msg){
-    const line = document.createElement("div");
-    line.textContent = "[" + new Date().toLocaleTimeString() + "] " + msg;
-    el.appendChild(line);
+  function add(line){
+    const d = document.createElement("div");
+    d.textContent = line;
+    el.appendChild(d);
     el.scrollTop = el.scrollHeight;
-    console.log("[TC DEBUG]", msg);
   }
-
-  window.__tcDebugLog = log;
-
-  log("Debug panel initialized");
-  log("location.href = " + location.href);
-  log("userAgent = " + navigator.userAgent);
-
-  document.addEventListener("DOMContentLoaded", () => {
-    log("DOMContentLoaded");
-  });
-
-  window.addEventListener("load", () => {
-    log("window load");
-  });
-
-  const origAppend = document.head.appendChild.bind(document.head);
-  document.head.appendChild = function(node){
-    if(node.tagName === "SCRIPT"){
-      log("Inject script: " + node.src);
-      node.addEventListener("load", () => log("Script loaded: " + node.src));
-      node.addEventListener("error", () => log("Script ERROR: " + node.src));
+  function flush(){
+    const arr = window.__tcDbg || [];
+    el.innerHTML = "<b>TonConnect debug</b> <button id=\"tc-copy\">Copy</button><br>";
+    arr.forEach(add);
+    if(window.__tcPreflight){
+      add("preflight.summary: " + JSON.stringify(window.__tcPreflight));
     }
-    return origAppend(node);
-  };
+  }
+  flush();
+  setInterval(flush, 500);
+
+  document.addEventListener("click", (e)=>{
+    if(e.target && e.target.id==="tc-copy"){
+      const arr = window.__tcDbg || [];
+      const txt = arr.join("\n") + (window.__tcPreflight ? ("\nPRE:" + JSON.stringify(window.__tcPreflight)) : "");
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt);
+      }
+    }
+  });
 })();
 </script>
 
@@ -1907,7 +1959,7 @@ async function waitTonConnectUI(timeoutMs = 12000){
         (window.TonConnectUI && window.TonConnectUI.TonConnectUI)
       ));
 
-    if(hasGlobal){ window.__tcDebugLog && __tcDebugLog("TonConnect global detected"); return true; }
+    if(hasGlobal) return true;
     if(Date.now() - start > timeoutMs) return false;
     await new Promise(r => setTimeout(r, 50));
   }
@@ -1953,14 +2005,10 @@ async function connectTonWallet(){
     (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
     (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI));
 
-  window.__tcDebugLog && __tcDebugLog("waitTonConnectUI result = " + ok);
-  window.__tcDebugLog && __tcDebugLog("TonUI = " + (TonUI ? "FOUND" : "NULL"));
-
   if(ok && TonUI){
 
     if(!window.__tonUI){
-      window.__tcDebugLog && __tcDebugLog("Creating TonConnectUI with manifest: " + manifestUrl);
-    window.__tonUI = new TonUI({ manifestUrl });
+      window.__tonUI = new TonUI({ manifestUrl });
 
       window.__tonUI.onStatusChange(async (wallet)=>{
         const raw = wallet?.account?.address || "";
