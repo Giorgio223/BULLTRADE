@@ -1111,100 +1111,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 </script>
 
+
+<script>
+// debug no-op (clean build)
+window.__DBG_ADD = null;
+</script>
+
 </head>
 <body>
 
-<!-- ERROR DEBUG OVERLAY -->
-<style>
-#errDbg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  max-height: 40%;
-  overflow: auto;
-  background: rgba(0,0,0,0.9);
-  color: #fff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  z-index: 100000;
-  padding: 8px;
-  display: none;
-}
-#errDbg .row { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
-#errDbg .hdr { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
-#errDbg button { font-size: 12px; padding: 4px 8px; }
-</style>
-<div id="errDbg">
-  <div class="hdr">
-    <b>DEBUG</b>
-    <button id="errDbgToggle">Hide</button>
-    <button id="errDbgCopy">Copy</button>
-    <button id="errDbgClear">Clear</button>
-  </div>
-  <div id="errDbgBody"></div>
-</div>
-<script>
-(function(){
-  const box = document.getElementById("errDbg");
-  const body = document.getElementById("errDbgBody");
-  const btnToggle = document.getElementById("errDbgToggle");
-  const btnCopy = document.getElementById("errDbgCopy");
-  const btnClear = document.getElementById("errDbgClear");
-
-  const logs = [];
-  function add(type, msg){
-    const line = "[" + new Date().toLocaleTimeString() + "] " + type + ": " + msg;
-    logs.push(line);
-    const div = document.createElement("div");
-    div.className = "row";
-    div.textContent = line;
-    body.appendChild(div);
-    box.style.display = "block";
-    body.scrollTop = body.scrollHeight;
-  }
-
-  window.__DBG_LOGS = logs;
-  window.__DBG_ADD = add;
-
-  const origErr = console.error.bind(console);
-  console.error = function(...args){
-    try{ add("console.error", args.map(a => (a && a.stack) ? a.stack : String(a)).join(" ")); }catch(_){}
-    return origErr(...args);
-  };
-
-  window.addEventListener("error", (e)=>{
-    const msg = (e && e.message ? e.message : "error") + (e && e.filename ? (" @ " + e.filename + ":" + e.lineno + ":" + e.colno) : "");
-    add("window.error", msg);
-  });
-
-  window.addEventListener("unhandledrejection", (e)=>{
-    const r = e && e.reason;
-    add("unhandledrejection", (r && (r.stack || r.message)) ? (r.stack || r.message) : String(r));
-  });
-
-  btnToggle.onclick = ()=>{
-    if(box.style.display === "none"){ box.style.display = "block"; btnToggle.textContent = "Hide"; }
-    else { box.style.display = "none"; btnToggle.textContent = "Show"; }
-  };
-  btnClear.onclick = ()=>{ logs.length = 0; body.innerHTML = ""; };
-  btnCopy.onclick = async ()=>{
-    const txt = logs.join("\n");
-    try{ await navigator.clipboard.writeText(txt); add("info","copied"); }catch(e){ add("copy-fail", String(e)); }
-  };
-
-  window.addEventListener("keydown", (e)=>{
-    if(e.ctrlKey && e.key === "`"){
-      box.style.display = (box.style.display === "none") ? "block" : "none";
-    }
-  });
-})();
-</script>
-
-  <div class="app">
+<div class="app">
     <div class="topbar">
       <div class="brandText">BULL TRADE</div>
       <button class="connectBtn" id="connectWalletBtn" type="button">Привязать кошелек</button>
+<div id="walletStatus" style="font-size:12px;opacity:.75;margin-top:6px;display:none;">Wallet: <span id="walletStatusText"></span></div>
       <button class="connectBtn danger" id="disconnectBtn" type="button" style="display:none">Отвязать</button>
       <button class="connectBtn" id="depositBtn" type="button">Депозит</button>
       <button class="connectBtn" id="withdrawBtn" type="button">Вывод</button>
@@ -2086,6 +2006,13 @@ function setWalletUI(addr){
   const disBtn = document.getElementById("disconnectBtn");
   if(btn) btn.textContent = addr ? ("Кошелек: " + shortAddr(addr)) : "Привязать кошелек";
   if(disBtn) disBtn.style.display = addr ? "inline-flex" : "none";
+
+  const ws = document.getElementById("walletStatus");
+  const wst = document.getElementById("walletStatusText");
+  if(ws && wst){
+    if(addr){ ws.style.display = "block"; wst.textContent = shortAddr(addr) + " ✅"; }
+    else { ws.style.display = "none"; wst.textContent = ""; }
+  }
 }
 
 async function disconnectTonWallet(){
@@ -2199,7 +2126,7 @@ async function refreshBalanceFromServer(){
   }catch(e){}
 }
 
-async function connectTonWallet(){
+async function connectTonWallet(opts = {}){
   const manifestUrl = location.origin + "/tonconnect-manifest.json";
 
   // ждём загрузку TonConnect UI (особенно важно в Telegram WebView)
@@ -2383,6 +2310,50 @@ async function requestWithdraw(){
       </div>
     </div>
   </div>
+
+
+<script>
+(function(){
+  const params = new URLSearchParams(location.search);
+  if(params.get("debug") !== "1") return;
+  const box = document.createElement("div");
+  box.style.position="fixed";
+  box.style.right="8px";
+  box.style.bottom="8px";
+  box.style.maxWidth="92vw";
+  box.style.maxHeight="35vh";
+  box.style.overflow="auto";
+  box.style.background="rgba(0,0,0,0.85)";
+  box.style.color="#0f0";
+  box.style.fontFamily="monospace";
+  box.style.fontSize="12px";
+  box.style.padding="8px";
+  box.style.zIndex="99999";
+  box.style.borderRadius="10px";
+  box.innerHTML = "<b style='color:#6cf'>DEBUG</b> <span id='dbgClose' style='cursor:pointer;color:#fff;float:right'>✕</span><div id='dbgBody'></div>";
+  const body = box.querySelector("#dbgBody");
+  box.querySelector("#dbgClose").onclick = ()=> box.remove();
+  function add(m){
+    const d=document.createElement("div");
+    d.textContent = "["+new Date().toLocaleTimeString()+"] "+m;
+    body.appendChild(d);
+    body.scrollTop = body.scrollHeight;
+  }
+  const origErr = console.error.bind(console);
+  console.error = (...args)=>{ add("ERR "+args.map(String).join(" ")); return origErr(...args); };
+  window.addEventListener("error",(e)=>add("window.error "+(e.message||e)));
+  window.addEventListener("unhandledrejection",(e)=>add("rejection "+(e.reason && (e.reason.message||e.reason) )));
+  setInterval(()=>{
+    try{
+      const ui = window.__tonUI;
+      const connected = !!(ui && (ui.wallet || ui.account));
+      add("state connected=" + connected);
+    }catch(_){}
+  }, 5000);
+  document.body.appendChild(box);
+  add("debug enabled (?debug=1)");
+})();
+</script>
 
 </body>
 </html>
