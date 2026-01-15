@@ -2816,5 +2816,48 @@ async function onWalletConnected(addr){
 // ================= END /api/me SAFE INIT =================
 </script>
 
+
+<script>
+// ================= CONNECT BUTTON BINDING PATCH =================
+(function(){
+  function bind(){
+    const btn = document.getElementById("connectWalletBtn");
+    if(!btn) return;
+
+    // Prevent form submit reloads (which can abort TonConnect flows)
+    try{
+      if(btn.tagName && btn.tagName.toLowerCase() === "button"){
+        btn.setAttribute("type", "button");
+      }
+    }catch(e){}
+
+    // Remove inline handlers if any and bind once
+    btn.onclick = async function(ev){
+      try{
+        ev.preventDefault();
+        ev.stopPropagation();
+      }catch(e){}
+
+      try{
+        if(typeof window.connectTonWallet === "function"){
+          await window.connectTonWallet({});
+        } else {
+          console.error("connectTonWallet is not defined");
+        }
+      } catch (e) {
+        console.log("Connect aborted/canceled:", e);
+      }
+    };
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", bind, { once: true });
+  } else {
+    bind();
+  }
+})();
+// ================= END CONNECT BUTTON BINDING PATCH =================
+</script>
+
 </body>
 </html>
