@@ -947,10 +947,6 @@ body{
 </style>
   <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js">
 
-// === TON helpers (global) ===
-window.tonToNanoStr = function window.tonToNanoStr(ton){
-  // accepts number or string, returns string (nanotons)
-  if(ton === null || ton === undefined) return "0";
   const s = String(ton).replace(",", ".").trim();
   if(!s) return "0";
   const parts = s.split(".");
@@ -984,6 +980,20 @@ window.tonToNanoStr = function window.tonToNanoStr(ton){
 
   loadNext(0);
 })();
+</script>
+
+
+<script>
+// === TON helpers (global, guaranteed) ===
+window.tonToNanoStr = function(ton){
+  if(ton === null || ton === undefined) return "0";
+  const s = String(ton).replace(",", ".").trim();
+  if(!s) return "0";
+  const parts = s.split(".");
+  const whole = (parts[0] || "").replace(/\D/g, "") || "0";
+  const frac = ((parts[1] || "").replace(/\D/g, "")).padEnd(9, "0").slice(0, 9);
+  return whole + frac;
+};
 </script>
 
 </head>
@@ -1083,7 +1093,7 @@ window.tonToNanoStr = function window.tonToNanoStr(ton){
       <button class="connectBtn danger" id="disconnectBtn" type="button" style="display:none">Отвязать</button>
       <button class="connectBtn" id="depositBtn" type="button">Депозит</button>
       <button class="connectBtn" id="withdrawBtn" type="button">Вывод</button>
-      <div class="balanceWrap"><span class="tonIcon" aria-hidden="true">
+      <div class="balanceWrap"><span class="tonIcon">
 <svg viewBox="0 0 64 64" role="img" focusable="false" xmlns="http://www.w3.org/2000/svg">
   <circle cx="32" cy="32" r="30" fill="rgba(0,0,0,.15)" stroke="rgba(255,255,255,.25)" stroke-width="2"/>
   <path d="M20 18h24c3 0 5 2.5 3.7 5.2L34.3 49.5c-1 2-3.8 2-4.8 0L16.3 23.2C15 20.5 17 18 20 18zm2.6 4.6L32 43.5l9.4-20.9H22.6z"
@@ -2245,7 +2255,7 @@ async function requestWithdraw(){
 </script>
 
   <!-- UI modal (used instead of prompt/alert/confirm) -->
-  <div id="uiModalBackdrop" class="ui-modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
+  <div id="uiModalBackdrop" class="ui-modal-backdrop" role="dialog" aria-modal="true">
     <div class="ui-modal">
       <div class="ui-modal-head" id="uiModalTitle">Сообщение</div>
       <div class="ui-modal-body">
