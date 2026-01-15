@@ -963,7 +963,7 @@ body{
 <script>
 (function () {
   const urls = [
-    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768445526"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768445690"
   ];
 
   function loadNext(i) {
@@ -997,11 +997,60 @@ window.tonToNanoStr = function(ton){
 </script>
 
 <script>
-// === TonConnect sendTransaction helper ===
-window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
-  if(!window.__tonUI){
-    throw new Error("TonConnect UI is not initialized (__tonUI missing)");
+<script>
+// === TonConnect sendTransaction helper (auto-init) ===
+async function __getTonUI(){
+  // already created
+  if(window.__tonUI) return window.__tonUI;
+
+  // wait for library
+  const start = Date.now();
+  while(true){
+    const has =
+      (typeof TonConnectUI !== "undefined") ||
+      (window.TonConnectUI) ||
+      (window.TON_CONNECT_UI) ||
+      (window.TonConnectUI && window.TonConnectUI.TonConnectUI) ||
+      (window.TON_CONNECT_UI && (window.TON_CONNECT_UI.TonConnectUI || window.TON_CONNECT_UI.default));
+    if(has) break;
+    if(Date.now() - start > 12000) throw new Error("TonConnect UI library not found");
+    await new Promise(r=>setTimeout(r,50));
   }
+
+  const TonUI =
+    (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
+    (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI)) ||
+    (window.TON_CONNECT_UI && (window.TON_CONNECT_UI.TonConnectUI || window.TON_CONNECT_UI.default || window.TON_CONNECT_UI));
+
+  if(!TonUI) throw new Error("TonConnect UI constructor not found");
+
+  const manifestUrl = location.origin + "/tonconnect-manifest.json";
+  window.__tonUI = new TonUI({ manifestUrl });
+
+  // keep wallet state in localStorage for UI
+  try{
+    window.__tonUI.onStatusChange((wallet)=>{
+      const raw = wallet?.account?.address || "";
+      if(raw) localStorage.setItem("bt_wallet", raw);
+      else localStorage.removeItem("bt_wallet");
+    });
+  }catch(_){
+    // ignore
+  }
+
+  return window.__tonUI;
+}
+
+window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
+  const ui = await __getTonUI();
+
+  // ensure connected
+  const connected = !!(ui.wallet || ui.account || ui.connected);
+  if(!connected){
+    // this will open wallet selector
+    await ui.connectWallet();
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const tx = {
     validUntil: now + validUntilSec,
@@ -1012,11 +1061,9 @@ window.sendTonTransaction = async function({to, amountNano, payload, validUntilS
       }
     ]
   };
-  if(payload){
-    // TonConnect supports payload as base64 (depending on wallet). We'll pass through.
-    tx.messages[0].payload = payload;
-  }
-  return await window.__tonUI.sendTransaction(tx);
+  if(payload) tx.messages[0].payload = payload;
+
+  return await ui.sendTransaction(tx);
 };
 </script>
 
