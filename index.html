@@ -1941,6 +1941,20 @@ function tonToNanoStr(ton){
   }
 }
 
+
+// === TON helpers ===
+function tonToNanoStr(ton){
+  // accepts number or string, returns string (nanotons)
+  if(ton === null || ton === undefined) return "0";
+  const s = String(ton).replace(",", ".").trim();
+  if(!s) return "0";
+  const parts = s.split(".");
+  const whole = (parts[0] || "").replace(/\D/g, "") || "0";
+  const frac = ((parts[1] || "").replace(/\D/g, "")).padEnd(9, "0").slice(0, 9);
+  return whole + frac;
+}
+
+
 async function sendTonTransaction(toAddress, amountNano, payloadBase64){
   if(!window.__tonUI || typeof window.__tonUI.sendTransaction !== "function"){
     await UI.alert("TonConnect не готов. Нажми «Привязать кошелек» и выбери кошелек.", "Депозит");
