@@ -1051,9 +1051,24 @@ function __isConnected(ui){
 window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
   const ui = await __getTonUI();
 
-  let amt = String(amountNano);
-  amt = amt.replace(/\D/g, "");
-  if(!amt) throw new Error("amountNano is empty");
+  // normalize amountNano to integer nanotons string
+  let amtRaw = (amountNano === null || amountNano === undefined) ? "" : String(amountNano).trim();
+
+  // if caller accidentally passed TON like "0.1", convert here
+  if(amtRaw.includes(".") || amtRaw.includes(",")){
+    if(typeof window.tonToNanoStr === "function"){
+      amtRaw = window.tonToNanoStr(amtRaw);
+    }
+  }
+
+  // keep only digits
+  let amt = amtRaw.replace(/\D/g, "");
+  // trim leading zeros but keep single zero
+  amt = amt.replace(/^0+(?=\d)/, "");
+
+  if(!amt || amt === "0"){
+    throw new Error("amountNano is empty (check entered сумма) :: raw=" + amtRaw);
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const tx = {
@@ -1067,22 +1082,13 @@ window.sendTonTransaction = async function({to, amountNano, payload, validUntilS
   };
   if(payload) tx.messages[0].payload = payload;
 
-  window.__DBG_ADD && window.__DBG_ADD("info", "sendTransaction tx=" + JSON.stringify(tx));
-
   if(!__isConnected(ui)){
-    window.__DBG_ADD && window.__DBG_ADD("info", "wallet not connected -> connectWallet()");
     try{
       await ui.connectWallet();
     }catch(e){
       const msg = String(e && (e.message || e));
-      if(msg.includes("already connected")){
-        window.__DBG_ADD && window.__DBG_ADD("info", "connectWallet ignored: already connected");
-      } else {
-        throw e;
-      }
+      if(!msg.includes("already connected")) throw e;
     }
-  } else {
-    window.__DBG_ADD && window.__DBG_ADD("info", "wallet already connected");
   }
 
   return await ui.sendTransaction(tx);
@@ -2310,50 +2316,6 @@ async function requestWithdraw(){
       </div>
     </div>
   </div>
-
-
-<script>
-(function(){
-  const params = new URLSearchParams(location.search);
-  if(params.get("debug") !== "1") return;
-  const box = document.createElement("div");
-  box.style.position="fixed";
-  box.style.right="8px";
-  box.style.bottom="8px";
-  box.style.maxWidth="92vw";
-  box.style.maxHeight="35vh";
-  box.style.overflow="auto";
-  box.style.background="rgba(0,0,0,0.85)";
-  box.style.color="#0f0";
-  box.style.fontFamily="monospace";
-  box.style.fontSize="12px";
-  box.style.padding="8px";
-  box.style.zIndex="99999";
-  box.style.borderRadius="10px";
-  box.innerHTML = "<b style='color:#6cf'>DEBUG</b> <span id='dbgClose' style='cursor:pointer;color:#fff;float:right'>✕</span><div id='dbgBody'></div>";
-  const body = box.querySelector("#dbgBody");
-  box.querySelector("#dbgClose").onclick = ()=> box.remove();
-  function add(m){
-    const d=document.createElement("div");
-    d.textContent = "["+new Date().toLocaleTimeString()+"] "+m;
-    body.appendChild(d);
-    body.scrollTop = body.scrollHeight;
-  }
-  const origErr = console.error.bind(console);
-  console.error = (...args)=>{ add("ERR "+args.map(String).join(" ")); return origErr(...args); };
-  window.addEventListener("error",(e)=>add("window.error "+(e.message||e)));
-  window.addEventListener("unhandledrejection",(e)=>add("rejection "+(e.reason && (e.reason.message||e.reason) )));
-  setInterval(()=>{
-    try{
-      const ui = window.__tonUI;
-      const connected = !!(ui && (ui.wallet || ui.account));
-      add("state connected=" + connected);
-    }catch(_){}
-  }, 5000);
-  document.body.appendChild(box);
-  add("debug enabled (?debug=1)");
-})();
-</script>
 
 </body>
 </html>
