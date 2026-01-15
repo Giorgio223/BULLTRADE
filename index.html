@@ -1317,35 +1317,41 @@ async function __waitForWallet(ui, timeoutMs = 60000){
   });
 }
 
-async function __ensureConnected(ui, opts = {}){
-  if(!ui) throw new Error("TonConnect UI not initialized");
-  if(__isConnected(ui)){
-    if(opts.allowRebind){
-      try{ await ui.disconnect(); }catch(_){}
-    } else {
-      return;
+async function __ensureConnected(ui, opts = {}) {
+  if (!ui) throw new Error("TonConnect UI not ready");
+
+  // 1) Wait for session restore if library supports it (prevents "already connected" during restore)
+  try {
+    if (ui.connectionRestored && typeof ui.connectionRestored.then === "function") {
+      await ui.connectionRestored;
     }
+  } catch (e) {
+    // ignore
   }
 
-  // lock
-  if(ui.__btConnecting) return;
+  // 2) If already connected after restore -> done
+  if (__isConnected(ui)) return ui.wallet;
+
+  // 3) Global lock to prevent parallel connects
+  ui.__btConnecting = ui.__btConnecting || false;
+  if (ui.__btConnecting) return null;
   ui.__btConnecting = true;
-  try{
-    const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
 
-    // start connection flow (do NOT await openSingleWalletModal; we await onStatusChange instead)
-    try{
-      if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
-        ui.openSingleWalletModal("telegram-wallet");
-      } else {
-        ui.connectWallet();
-      }
-    }catch(e){
-      const msg = String(e && (e.message || e));
-      if(!msg.includes("already connected")) throw e;
+  try {
+    // 4) Try connect
+    await ui.connectWallet(opts);
+    return ui.wallet;
+  } catch (e) {
+    // 5) If TonConnect says "already connected", disconnect and retry once
+    const msg = String(e && (e.message || e));
+    if (msg.includes("wallet already connected") || msg.includes("already connected")) {
+      try { await ui.disconnect(); } catch(_) {}
+      // after disconnect, wait a tick and retry
+      await new Promise(r => setTimeout(r, 150));
+      await ui.connectWallet(opts);
+      return ui.wallet;
     }
-
-    await __waitForWallet(ui, 60000);
+    throw e;
   } finally {
     ui.__btConnecting = false;
   }
