@@ -1190,17 +1190,21 @@ function __isConnected(ui){
 }
 
 window.sendTonTransaction = async function(...args){
-  const _norm = normalizeSendArgs(args);
-  const toAddr = _norm.toAddr;
-  const amountNanoIn = _norm.amountNanoIn;
-  const payloadIn = _norm.payloadIn;
-  const validUntilSec = 300;
+  // supports: sendTonTransaction(to, amountNano, payload) OR sendTonTransaction({to, amountNano, payload, validUntilSec})
+  const arg0 = args[0];
+  const norm = (args.length === 1 && arg0 && typeof arg0 === "object")
+    ? arg0
+    : { to: args[0], amountNano: args[1], payload: args[2] };
+
+  const toAddr = norm.to;
+  const amountNanoVal = norm.amountNano;
+  const payloadVal = norm.payload;
+  const validUntilSec = Number.isFinite(norm.validUntilSec) ? norm.validUntilSec : 300;
 
   const ui = await __getTonUI();
 
-  // normalize amountNanoIn toAddr integer nanotons string
-
-  let amtRaw = (amountNanoIn === null || amountNanoIn === undefined) ? "" : String(amountNanoIn).trim();
+  // normalize amount to integer nanotons string
+  let amtRaw = (amountNanoVal === null || amountNanoVal === undefined) ? "" : String(amountNanoVal).trim();
 
   // if caller accidentally passed TON like "0.1", convert here
   if(amtRaw.includes(".") || amtRaw.includes(",")){
@@ -1213,7 +1217,16 @@ window.sendTonTransaction = async function(...args){
   amt = amt.replace(/^0+(?=\d)/, "");
 
   if(!amt || amt === "0"){
-    throw new Error("amountNanoIn is empty (check entered сумма) :: raw=" + amtRaw);
+    throw new Error("amountNano is empty (check entered сумма) :: raw=" + amtRaw);
+  }
+
+  if(!toAddr){
+    throw new Error("to address is empty");
+  }
+
+  // connect only if not connected
+  if(!__isConnected(ui)){
+    await __ensureConnectedOnce(ui);
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -1222,27 +1235,11 @@ window.sendTonTransaction = async function(...args){
     messages: [
       {
         address: String(toAddr),
-        amount: amt
+        amount: String(amt)
       }
     ]
   };
-  if(payloadIn) tx.messages[0].payloadIn = payloadIn;
-
-  if(!__isConnected(ui)){
-    try{
-      const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
-    if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
-      await __ensureConnectedOnce(ui);
-} else if (typeof ui.openModal === "function"){
-      await __ensureConnectedOnce(ui);
-} else {
-      await __ensureConnectedOnce(ui);
-}
-}catch(e){
-      const msg = String(e && (e.message || e));
-      if(!msg.includes("already connected")) throw e;
-    }
-  }
+  if(payloadVal) tx.messages[0].payload = payloadVal;
 
   return await ui.sendTransaction(tx);
 };
@@ -2332,68 +2329,9 @@ async function refreshBalanceFromServer(){
 }
 
 async function connectTonWallet(opts = {}){
-  const manifestUrl = location.origin + "/tonconnect-manifest.json";
-
-  // ждём загрузку TonConnect UI (особенно важно в Telegram WebView)
-  const ok = await waitTonConnectUI(12000);
-
-  // TonConnect UI может быть доступен как:
-  // 1) глобальный класс TonConnectUI
-  // 2) window.TonConnectUI (UMD)
-  // 3) window.TonConnectUI.TonConnectUI (некоторые сборки)
-  const TonUI =
-    // classic globals
-    (typeof TonConnectUI !== "undefined" ? TonConnectUI : null) ||
-    (window.TonConnectUI && (window.TonConnectUI.TonConnectUI || window.TonConnectUI)) ||
-    // TON_CONNECT_UI global (v2 builds often expose this)
-    (window.TON_CONNECT_UI && (window.TON_CONNECT_UI.TonConnectUI || window.TON_CONNECT_UI.default || window.TON_CONNECT_UI));
-
-  if(ok && TonUI){
-
-    if(!window.__tonUI){
-      window.__tonUI = new TonUI({ manifestUrl });
-
-      window.__tonUI.onStatusChange(async (wallet)=>{
-        const raw = wallet?.account?.address || "";
-        const btn = document.getElementById("connectWalletBtn");
-        const disBtn = document.getElementById("disconnectBtn");
-
-        if(raw){
-          localStorage.setItem(WALLET_KEY, raw);
-          setWalletUI(raw);
-
-          // create user record + sync balance
-          await fetch("/api/me", {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({ address: raw })
-          }).catch(()=>{});
-          await fetchServerBalance();
-        }else{
-          localStorage.removeItem(WALLET_KEY);
-          setWalletUI("");
-        }
-      });
-    }
-    window.__tonUI.openModal();
-    return;
-  }
-
-  // Fallback (если TonConnect UI не загрузился)
-  const existing = localStorage.getItem(WALLET_KEY) || "";
-  const addr = await UI.prompt("TonConnect не загрузился. Вставь TON адрес (демо).", existing, "TON адрес");
-  if(addr){
-    localStorage.setItem(WALLET_KEY, addr.trim());
-    const btn = document.getElementById("connectWalletBtn");
-        const disBtn = document.getElementById("disconnectBtn");
-    setWalletUI(addr.trim());
-    await fetch("/api/me", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ address: addr.trim() })
-    }).catch(()=>{});
-    await fetchServerBalance();
-  }
+  await waitTonConnectUI();
+  const ui = await __getTonUI();
+  await __ensureConnectedOnce(ui, opts);
 }
 
 async function startDeposit(){
