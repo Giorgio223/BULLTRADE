@@ -1,4 +1,4 @@
-<!doctype html>
+ <!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
@@ -835,6 +835,8 @@ body{
   cursor:pointer;
 }
 .connectBtn:active{ transform: scale(.98); }
+
+.connectBtn.danger{ border-color: rgba(255,90,90,.35); background: rgba(255,90,90,.10); }
 .balanceWrap{
   margin-left:auto;
   display:flex;
@@ -848,6 +850,36 @@ body{
   width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center;
 }
 .tonIcon svg{ width:18px; height:18px; display:block; }
+
+
+/* Mobile topbar optimizations */
+@media (max-width: 520px){
+  .topbar{
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+    min-height: unset;
+  }
+  .brandText{
+    flex: 1 1 100%;
+    font-size: 16px;
+  }
+  .connectBtn{
+    flex: 1 1 calc(50% - 8px);
+    padding: 10px 10px;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+  .balanceWrap{
+    flex: 1 1 100%;
+    margin-left: 0;
+    white-space: normal;
+    font-size: 12px;
+  }
+  .balanceWrap span:nth-child(2){
+    opacity: .9;
+  }
+}
 
 
 /* ===== UI modal (replaces prompt/alert/confirm for Telegram WebApp & iOS) ===== */
@@ -946,6 +978,7 @@ body{
     <div class="topbar">
       <div class="brandText">BULL TRADE</div>
       <button class="connectBtn" id="connectWalletBtn" type="button">Привязать кошелек</button>
+      <button class="connectBtn danger" id="disconnectBtn" type="button" style="display:none">Отвязать</button>
       <button class="connectBtn" id="depositBtn" type="button">Депозит</button>
       <button class="connectBtn" id="withdrawBtn" type="button">Вывод</button>
       <div class="balanceWrap"><span class="tonIcon" aria-hidden="true">
@@ -1813,12 +1846,41 @@ start();
 
 // ===== TON Connect (TonConnect UI) + server balance =====
 const WALLET_KEY = "ton_wallet_address";
+// TODO: укажи адрес для депозита (куда пользователи будут отправлять TON)
+const DEPOSIT_RECEIVER = "YOUR_TON_DEPOSIT_ADDRESS_HERE";
 
 function shortAddr(a){
   if(!a) return "";
   return a.slice(0,6) + "…" + a.slice(-6);
 }
 
+function setWalletUI(addr){
+  const btn = document.getElementById("connectWalletBtn");
+        const disBtn = document.getElementById("disconnectBtn");
+        const disBtn = document.getElementById("disconnectBtn");
+const dis = document.getElementById("disconnectBtn");
+  if(btn) btn.textContent = addr ? ("Кошелек: " + shortAddr(addr)) : "Привязать кошелек";
+  if(dis) dis.style.display = addr ? "inline-flex" : "none";
+}
+
+async function disconnectTonWallet(){
+  // TonConnect disconnect (if available)
+  try{
+    if(window.__tonUI && typeof window.__tonUI.disconnect === "function"){
+      await window.__tonUI.disconnect();
+    }
+  }catch(e){}
+  // clear local state
+  localStorage.removeItem(WALLET_KEY);
+  setWalletUI("");
+  // optional: notify backend
+  fetch("/api/me", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ address: "" })
+  }).catch(()=>{});
+  await fetchServerBalance();
+}
 async function fetchServerBalance(){
   try{
     const addr = localStorage.getItem(WALLET_KEY);
@@ -1864,7 +1926,47 @@ function nanoToTon(nanoStr){
     const whole = n / 1000000000n;
     const frac = n % 1000000000n;
     const fracStr = frac.toString().padStart(9,"0").slice(0,6);
-    return `${whole.toString()}.${fracStr}`;
+    return `${whole.toString()}
+function tonToNanoStr(ton){
+  // ton -> nano string for TonConnect transaction
+  const s = String(ton).replace(",", ".").trim();
+  if(!s) return null;
+  const parts = s.split(".");
+  const whole = parts[0].replace(/\D/g,"") || "0";
+  const frac = (parts[1] || "").replace(/\D/g,"").slice(0,9);
+  const fracPadded = (frac + "000000000").slice(0,9);
+  try{
+    const nano = BigInt(whole) * 1000000000n + BigInt(fracPadded);
+    return nano.toString();
+  }catch(e){
+    return null;
+  }
+}
+
+async function sendTonTransaction(toAddress, amountNano, payloadBase64){
+  if(!window.__tonUI || typeof window.__tonUI.sendTransaction !== "function"){
+    await UI.alert("TonConnect не готов. Нажми «Привязать кошелек» и выбери кошелек.", "Депозит");
+    return false;
+  }
+  const tx = {
+    validUntil: Math.floor(Date.now()/1000) + 600,
+    messages: [{
+      address: toAddress,
+      amount: String(amountNano)
+    }]
+  };
+  if(payloadBase64){
+    tx.messages[0].payload = payloadBase64;
+  }
+  try{
+    await window.__tonUI.sendTransaction(tx);
+    return true;
+  }catch(e){
+    await UI.alert("Транзакция отменена или ошибка: " + (e?.message || e), "Депозит");
+    return false;
+  }
+}
+.${fracStr}`;
   }catch(e){
     return "0.000000";
   }
@@ -1908,10 +2010,11 @@ async function connectTonWallet(){
       window.__tonUI.onStatusChange(async (wallet)=>{
         const raw = wallet?.account?.address || "";
         const btn = document.getElementById("connectWalletBtn");
+        const disBtn = document.getElementById("disconnectBtn");
 
         if(raw){
           localStorage.setItem(WALLET_KEY, raw);
-          if(btn) btn.textContent = "Кошелек: " + shortAddr(raw);
+          setWalletUI(raw);
 
           // create user record + sync balance
           await fetch("/api/me", {
@@ -1922,7 +2025,7 @@ async function connectTonWallet(){
           await fetchServerBalance();
         }else{
           localStorage.removeItem(WALLET_KEY);
-          if(btn) btn.textContent = "Привязать кошелек";
+          setWalletUI("");
         }
       });
     }
@@ -1936,7 +2039,8 @@ async function connectTonWallet(){
   if(addr){
     localStorage.setItem(WALLET_KEY, addr.trim());
     const btn = document.getElementById("connectWalletBtn");
-    if(btn) btn.textContent = "Кошелек: " + shortAddr(addr.trim());
+        const disBtn = document.getElementById("disconnectBtn");
+    setWalletUI(addr.trim());
     await fetch("/api/me", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -1948,33 +2052,60 @@ async function connectTonWallet(){
 
 async function startDeposit(){
   const addr = localStorage.getItem(WALLET_KEY);
-  if(!addr){ UI.alert("Сначала привяжи кошелек."); return; }
+  if(!addr){ await UI.alert("Сначала привяжи кошелек."); return; }
 
   const amtStr = await UI.prompt("Сколько TON пополнить? (например 0.5)", "0.1", "Депозит", "Например 0.5");
   if(!amtStr) return;
-  const amountTon = Number(amtStr.replace(",", "."));
-  if(!Number.isFinite(amountTon) || amountTon <= 0){ UI.alert("Неверная сумма"); return; }
 
-  const r = await fetch("/api/deposit/create", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ address: addr, amountTon })
-  });
-  const t = await r.text();
-  if(!r.ok){ await UI.alert("Ошибка депозита: " + t); return; }
-  const data = JSON.parse(t);
+  const amountTon = Number(String(amtStr).replace(",", "."));
+  if(!Number.isFinite(amountTon) || amountTon <= 0){ await UI.alert("Неверная сумма"); return; }
 
-  const msg =
-    "Адрес депозита:\\n" + data.depositAddress + "\\n\\n" +
-    "Комментарий (ОБЯЗАТЕЛЬНО):\\n" + data.comment + "\\n\\n" +
-    "Открыть кошелек для отправки?";
-  if(await UI.confirm(msg, "Депозит")){
-    location.href = data.deeplink;
+  // создаём депозит на сервере (если есть бэкенд) — чтобы получить комментарий/пейлоад для идентификации
+  let payTo = "";
+  let payload = "";
+  let amountNano = tonToNanoStr(amountTon);
+  try{
+    const r = await fetch("/api/deposit/create", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ address: addr, amountTon })
+    });
+
+    const ct = (r.headers.get("content-type") || "").toLowerCase();
+    if(ct.includes("application/json")){
+      const data = await r.json();
+      payTo = (data.toAddress || data.payTo || "").trim();
+      payload = (data.payload || data.payloadBase64 || "").trim();
+      if(data.amountNano) amountNano = String(data.amountNano);
+    }else{
+      // если сервер вернул просто текст — покажем его после оплаты
+      const t = await r.text();
+      if(!r.ok){ await UI.alert("Ошибка депозита: " + t); return; }
+    }
+  }catch(e){
+    // сервер может быть недоступен — тогда просто отправим на DEPOSIT_RECEIVER
   }
-  // ждём и подтягиваем баланс
-  setTimeout(fetchServerBalance, 8000);
-  setTimeout(fetchServerBalance, 16000);
+
+  if(!payTo) payTo = DEPOSIT_RECEIVER;
+
+  if(!payTo || payTo === "YOUR_TON_DEPOSIT_ADDRESS_HERE"){
+    await UI.alert("Не задан адрес для депозита. Укажи DEPOSIT_RECEIVER в коде или пусть /api/deposit/create возвращает toAddress.", "Депозит");
+    return;
+  }
+  if(!amountNano){
+    await UI.alert("Не удалось посчитать сумму в nanoTON.", "Депозит");
+    return;
+  }
+
+  // Открываем кошелёк и предлагаем оплатить
+  const ok = await sendTonTransaction(payTo, amountNano, payload);
+  if(ok){
+    await UI.alert("Запрос на оплату отправлен в кошелёк. После подтверждения баланс обновится автоматически.", "Депозит");
+    // попробуем обновить баланс через сервер
+    await fetchServerBalance();
+  }
 }
+
 
 async function requestWithdraw(){
   const addr = localStorage.getItem(WALLET_KEY);
@@ -2003,11 +2134,15 @@ async function requestWithdraw(){
 
 (function(){
   const btn = document.getElementById("connectWalletBtn");
+        const disBtn = document.getElementById("disconnectBtn");
   if(btn){
     btn.addEventListener("click", connectTonWallet);
     const saved = localStorage.getItem(WALLET_KEY);
-    if(saved) btn.textContent = "Кошелек: " + shortAddr(saved);
+    setWalletUI(saved || "");
   }
+  const dis = document.getElementById("disconnectBtn");
+  if(dis) dis.addEventListener("click", disconnectTonWallet);
+
   const dep = document.getElementById("depositBtn");
   if(dep) dep.addEventListener("click", startDeposit);
   const wd = document.getElementById("withdrawBtn");
