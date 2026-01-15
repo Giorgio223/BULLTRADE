@@ -1049,27 +1049,17 @@ function __isConnected(ui){
 }
 
 window.sendTonTransaction = async function(...args){
-  const { to, amountNano, payload } = normalizeSendArgs(args);
+  const _norm = normalizeSendArgs(args);
+  const toAddr = _norm.toAddr;
+  const amountNanoIn = _norm.amountNanoIn;
+  const payloadIn = _norm.payloadIn;
   const validUntilSec = 300;
-
-  // Supports both:
-  // 1) sendTonTransaction({to, amountNano, payload, validUntilSec})
-  // 2) sendTonTransaction(to, amountNano, payload, validUntilSec)
-  let to, amountNano, payload, validUntilSec;
-  if(to && typeof to === "object" && !Array.isArray(to)){
-    ({to, amountNano, payload, validUntilSec} = to);
-  } else {
-    to = to;
-    amountNano = amountNano;
-    payload = payload;
-    validUntilSec = arg4;
-  }
-  if(!validUntilSec) validUntilSec = 300;
 
   const ui = await __getTonUI();
 
-  // normalize amountNano to integer nanotons string
-  let amtRaw = (amountNano === null || amountNano === undefined) ? "" : String(amountNano).trim();
+  // normalize amountNanoIn toAddr integer nanotons string
+ toAddr integer nanotons string
+  let amtRaw = (amountNanoIn === null || amountNanoIn === undefined) ? "" : String(amountNanoIn).trim();
 
   // if caller accidentally passed TON like "0.1", convert here
   if(amtRaw.includes(".") || amtRaw.includes(",")){
@@ -1082,7 +1072,7 @@ window.sendTonTransaction = async function(...args){
   amt = amt.replace(/^0+(?=\d)/, "");
 
   if(!amt || amt === "0"){
-    throw new Error("amountNano is empty (check entered сумма) :: raw=" + amtRaw);
+    throw new Error("amountNanoIn is empty (check entered сумма) :: raw=" + amtRaw);
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -1090,12 +1080,12 @@ window.sendTonTransaction = async function(...args){
     validUntil: now + validUntilSec,
     messages: [
       {
-        address: String(to),
+        address: String(toAddr),
         amount: amt
       }
     ]
   };
-  if(payload) tx.messages[0].payload = payload;
+  if(payloadIn) tx.messages[0].payloadIn = payloadIn;
 
   if(!__isConnected(ui)){
     try{
