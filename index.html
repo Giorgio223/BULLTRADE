@@ -1,4 +1,4 @@
-  <!doctype html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
@@ -1856,11 +1856,9 @@ function shortAddr(a){
 
 function setWalletUI(addr){
   const btn = document.getElementById("connectWalletBtn");
-        const disBtn = document.getElementById("disconnectBtn");
-        const disBtn = document.getElementById("disconnectBtn");
-const dis = document.getElementById("disconnectBtn");
+  const disBtn = document.getElementById("disconnectBtn");
   if(btn) btn.textContent = addr ? ("Кошелек: " + shortAddr(addr)) : "Привязать кошелек";
-  if(dis) dis.style.display = addr ? "inline-flex" : "none";
+  if(disBtn) disBtn.style.display = addr ? "inline-flex" : "none";
 }
 
 async function disconnectTonWallet(){
