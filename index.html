@@ -2256,23 +2256,27 @@ function setWalletUI(addr){
   }
 }
 
+let __disconnecting = false;
 async function disconnectTonWallet(){
-  // TonConnect disconnect (if available)
+  if(__disconnecting) return;
+  __disconnecting = true;
   try{
-    if(window.__tonUI && typeof window.__tonUI.disconnect === "function"){
-      await window.__tonUI.disconnect();
-    }
-  }catch(e){}
-  // clear local state
-  localStorage.removeItem(WALLET_KEY);
-  setWalletUI("");
-  // optional: notify backend
-  fetch("/api/me", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ address: "" })
-  }).catch(()=>{});
-  await fetchServerBalance();
+    // TonConnect disconnect (if available)
+    try{
+      if(window.__tonUI && typeof window.__tonUI.disconnect === "function"){
+        await window.__tonUI.disconnect();
+      }
+    }catch(e){}
+
+    // clear local state
+    try{ localStorage.removeItem(WALLET_KEY); }catch(e){}
+    try{ setWalletUI(""); }catch(e){}
+
+    // IMPORTANT: do NOT call /api/me on disconnect (backend requires address)
+    await fetchServerBalance();
+  } finally {
+    __disconnecting = false;
+  }
 }
 async function fetchServerBalance(){
   try{
@@ -2530,8 +2534,10 @@ async function toggleTonWallet(opts = {}) {
   const addr = ui?.wallet?.account?.address || "";
   if (addr) {
     localStorage.setItem(WALLET_KEY, addr);
+    onWalletConnected(addr);
+    onWalletConnected(addr);
     setWalletUI(addr);
-  }
+}
 }
 // ================= END SAFE TONCONNECT PATCH =================
 </script>
@@ -2567,7 +2573,10 @@ async function toggleTonWallet(opts = {}) {
     const addr = ui?.wallet?.account?.address || ui?.account?.address || "";
     if (addr) {
       try { localStorage.setItem(WALLET_KEY, addr); } catch(e){}
-      try { setWalletUI(addr); } catch(e){}
+      try { onWalletConnected(addr);
+    onWalletConnected(addr);
+    setWalletUI(addr);
+} catch(e){}
     }
   };
 })();
@@ -2653,7 +2662,10 @@ async function toggleTonWallet(opts = {}) {
         const addr = ui?.wallet?.account?.address || "";
         if(addr){
           try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
-          try{ setWalletUI(addr); }catch(e){}
+          try{ onWalletConnected(addr);
+    onWalletConnected(addr);
+    setWalletUI(addr);
+}catch(e){}
         }
       };
     }
@@ -2729,7 +2741,10 @@ async function toggleTonWallet(opts = {}) {
       const addr = ui?.wallet?.account?.address || "";
       if(addr){
         try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
-        try{ setWalletUI(addr); }catch(e){}
+        try{ onWalletConnected(addr);
+    onWalletConnected(addr);
+    setWalletUI(addr);
+}catch(e){}
       }
       return;
     }
@@ -2752,7 +2767,10 @@ async function toggleTonWallet(opts = {}) {
     const addr = ui?.wallet?.account?.address || "";
     if(addr){
       try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
-      try{ setWalletUI(addr); }catch(e){}
+      try{ onWalletConnected(addr);
+    onWalletConnected(addr);
+    setWalletUI(addr);
+}catch(e){}
     }
   }
 
@@ -2779,6 +2797,23 @@ async function toggleTonWallet(opts = {}) {
   }catch(e){}
 })();
 // ================= END TELEGRAM TON WALLET CONNECT PATCH =================
+</script>
+
+
+<script>
+// ================= /api/me SAFE INIT (ONLY AFTER CONNECT) =================
+async function onWalletConnected(addr){
+  if(!addr || typeof addr !== "string") return;
+  // basic sanity: TON raw address often starts with EQ/ UQ etc; keep it permissive
+  try{
+    await fetch("/api/me", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ address: addr })
+    });
+  }catch(e){}
+}
+// ================= END /api/me SAFE INIT =================
 </script>
 
 </body>
