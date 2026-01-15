@@ -997,7 +997,6 @@ window.tonToNanoStr = function(ton){
 </script>
 
 <script>
-<script>
 // === TonConnect sendTransaction helper (auto-init) ===
 async function __getTonUI(){
   // already created
@@ -2135,7 +2134,7 @@ function nanoToTon(nanoStr){
 // === TON helpers ===
 
 
-async function sendTonTransaction(toAddress, amountNano, payloadBase64){
+async function window.sendTonTransaction(toAddress, amountNano, payloadBase64){
   if(!window.__tonUI || typeof window.__tonUI.sendTransaction !== "function"){
     await UI.alert("TonConnect не готов. Нажми «Привязать кошелек» и выбери кошелек.", "Депозит");
     return false;
@@ -2290,7 +2289,7 @@ async function startDeposit(){
   }
 
   // Открываем кошелёк и предлагаем оплатить
-  const ok = await sendTonTransaction(payTo, amountNano, payload);
+  const ok = await window.sendTonTransaction(payTo, amountNano, payload);
   if(ok){
     await UI.alert("Запрос на оплату отправлен в кошелёк. После подтверждения баланс обновится автоматически.", "Депозит");
     // попробуем обновить баланс через сервер
