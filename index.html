@@ -1226,7 +1226,7 @@ window.sendTonTransaction = async function(...args){
 
   // connect only if not connected
   if(!__isConnected(ui)){
-    await __ensureConnectedOnce(ui);
+    await __ensureConnected(ui);
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -1276,39 +1276,6 @@ window.__DBG_ADD = null;
 
 <script>
 // === TonConnect connect helper (no double connect) ===
-async function __ensureConnectedOnce(ui, opts = {}){
-  if(!ui) throw new Error("TonConnect UI not initialized");
-  // lock to avoid parallel calls
-  if(ui.__btConnecting) return;
-  ui.__btConnecting = true;
-  try{
-    const connected = !!(ui.wallet || ui.account);
-    if(connected){
-      // if user explicitly wants to rebind, disconnect first
-      if(opts.allowRebind){
-        try{ await ui.disconnect(); }catch(_){}
-      } else {
-        return;
-      }
-    }
-
-    const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
-
-    // Prefer Telegram Wallet inside Telegram Mini App to avoid external deep-links
-    if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
-      await __ensureConnectedOnce(ui);
-} else if (typeof ui.openModal === "function"){
-      await __ensureConnectedOnce(ui);
-} else {
-      await __ensureConnectedOnce(ui);
-}
-  } finally {
-    ui.__btConnecting = false;
-  }
-}
-</script>
-
-
 <script>
 function normalizeSendArgs(args){
   // supports: (to, amountNano, payload) OR ({to, amountNano, payload})
@@ -1316,6 +1283,83 @@ function normalizeSendArgs(args){
     return args[0];
   }
   return { to: args[0], amountNano: args[1], payload: args[2] };
+}
+</script>
+
+
+<script>
+// === TonConnect wait for wallet helper ===
+function __isConnected(ui){
+  try{
+    if(ui && ui.wallet) return true;
+    if(ui && ui.account) return true;
+    if(ui && ui.connected) return true;
+  }catch(_){}
+  return false;
+}
+
+async function __waitForWallet(ui, timeoutMs = 60000){
+  if(__isConnected(ui)) return ui.wallet || ui.account;
+  return await new Promise((resolve, reject)=>{
+    let done = false;
+    let unsub = null;
+    const timer = setTimeout(()=>{
+      if(done) return;
+      done = true;
+      try{ if(typeof unsub === "function") unsub(); }catch(_){}
+      reject(new Error("Wallet connection timeout"));
+    }, timeoutMs);
+
+    try{
+      unsub = ui.onStatusChange((wallet)=>{
+        if(done) return;
+        const addr = wallet && wallet.account && wallet.account.address;
+        if(addr){
+          done = true;
+          clearTimeout(timer);
+          try{ if(typeof unsub === "function") unsub(); }catch(_){}
+          resolve(wallet);
+        }
+      });
+    }catch(e){
+      clearTimeout(timer);
+      reject(e);
+    }
+  });
+}
+
+async function __ensureConnected(ui, opts = {}){
+  if(!ui) throw new Error("TonConnect UI not initialized");
+  if(__isConnected(ui)){
+    if(opts.allowRebind){
+      try{ await ui.disconnect(); }catch(_){}
+    } else {
+      return;
+    }
+  }
+
+  // lock
+  if(ui.__btConnecting) return;
+  ui.__btConnecting = true;
+  try{
+    const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
+
+    // start connection flow (do NOT await openSingleWalletModal; we await onStatusChange instead)
+    try{
+      if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
+        ui.openSingleWalletModal("telegram-wallet");
+      } else {
+        ui.connectWallet();
+      }
+    }catch(e){
+      const msg = String(e && (e.message || e));
+      if(!msg.includes("already connected")) throw e;
+    }
+
+    await __waitForWallet(ui, 60000);
+  } finally {
+    ui.__btConnecting = false;
+  }
 }
 </script>
 
@@ -2331,7 +2375,7 @@ async function refreshBalanceFromServer(){
 async function connectTonWallet(opts = {}){
   await waitTonConnectUI();
   const ui = await __getTonUI();
-  await __ensureConnectedOnce(ui, opts);
+  await __ensureConnected(ui, opts);
 }
 
 async function startDeposit(){
