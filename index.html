@@ -29,6 +29,15 @@
     const g2 = !!(window.TonConnectUI);
     const g3 = !!(window.TonConnectUI && window.TonConnectUI.TonConnectUI);
     push("post-load globals: TonConnectUI=" + g1 + " window.TonConnectUI=" + g2 + " window.TonConnectUI.TonConnectUI=" + g3);
+    try{
+      const keys = Object.keys(window).filter(k => k.toLowerCase().includes("ton"));
+      push("window keys containing 'ton' = " + JSON.stringify(keys.slice(0,50)));
+      push("typeof TonConnectUI = " + (typeof TonConnectUI));
+      push("typeof window.TonConnectUI = " + (typeof window.TonConnectUI));
+    }catch(e){
+      push("diagnostics error: " + (e && (e.stack||e.message) ? (e.stack||e.message) : e));
+    }
+
   });
 })();
 </script>
@@ -954,7 +963,7 @@ body{
 <script>
 (function () {
   const urls = [
-    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768442903"
   ];
 
   const log = (m) => (window.__tcHeadLog ? window.__tcHeadLog(m) : console.log("[TC LOADER]", m));
