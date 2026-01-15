@@ -1048,17 +1048,20 @@ function __isConnected(ui){
   return false;
 }
 
-window.sendTonTransaction = async function(arg1, arg2, arg3, arg4){
+window.sendTonTransaction = async function(...args){
+  const { to, amountNano, payload } = normalizeSendArgs(args);
+  const validUntilSec = 300;
+
   // Supports both:
   // 1) sendTonTransaction({to, amountNano, payload, validUntilSec})
   // 2) sendTonTransaction(to, amountNano, payload, validUntilSec)
   let to, amountNano, payload, validUntilSec;
-  if(arg1 && typeof arg1 === "object" && !Array.isArray(arg1)){
-    ({to, amountNano, payload, validUntilSec} = arg1);
+  if(to && typeof to === "object" && !Array.isArray(to)){
+    ({to, amountNano, payload, validUntilSec} = to);
   } else {
-    to = arg1;
-    amountNano = arg2;
-    payload = arg3;
+    to = to;
+    amountNano = amountNano;
+    payload = payload;
     validUntilSec = arg4;
   }
   if(!validUntilSec) validUntilSec = 300;
@@ -1144,38 +1147,47 @@ window.__DBG_ADD = null;
 
 
 <script>
-// === TonConnect hard guard ===
-async function __ensureConnectedOnce(ui){
-  if(!ui) return;
-
-  // re-entrancy lock to avoid recursion / double calls
+// === TonConnect connect helper (no double connect) ===
+async function __ensureConnectedOnce(ui, opts = {}){
+  if(!ui) throw new Error("TonConnect UI not initialized");
+  // lock to avoid parallel calls
   if(ui.__btConnecting) return;
   ui.__btConnecting = true;
   try{
-    // If already connected, NEVER call connect/open again
-    const already = !!(ui.wallet || ui.account);
-    if(already) return;
+    const connected = !!(ui.wallet || ui.account);
+    if(connected){
+      // if user explicitly wants to rebind, disconnect first
+      if(opts.allowRebind){
+        try{ await ui.disconnect(); }catch(_){}
+      } else {
+        return;
+      }
+    }
 
     const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
 
-    // Use bracket notation so our global replacements never touch these calls
-    if(isTgMiniApp && typeof ui["openSingleWalletModal"] === "function"){
-      await ui["openSingleWalletModal"]("telegram-wallet");
-    } else if (typeof ui["openModal"] === "function"){
-      await ui["openModal"]();
-    } else if (typeof ui["connectWallet"] === "function"){
-      await ui["connectWallet"]();
-    } else {
-      throw new Error("No TonConnect connect method available");
-    }
+    // Prefer Telegram Wallet inside Telegram Mini App to avoid external deep-links
+    if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
+      await __ensureConnectedOnce(ui);
+} else if (typeof ui.openModal === "function"){
+      await __ensureConnectedOnce(ui);
+} else {
+      await __ensureConnectedOnce(ui);
+}
   } finally {
     ui.__btConnecting = false;
   }
-} else if (typeof ui.openModal === "function"){
-    await __ensureConnectedOnce(ui);
-} else {
-    await __ensureConnectedOnce(ui);
 }
+</script>
+
+
+<script>
+function normalizeSendArgs(args){
+  // supports: (to, amountNano, payload) OR ({to, amountNano, payload})
+  if(args.length === 1 && args[0] && typeof args[0] === "object"){
+    return args[0];
+  }
+  return { to: args[0], amountNano: args[1], payload: args[2] };
 }
 </script>
 
@@ -2232,8 +2244,8 @@ async function connectTonWallet(opts = {}){
         }
       });
     }
-    await __ensureConnectedOnce(window.__tonUI);
-return;
+    window.__tonUI.openModal();
+    return;
   }
 
   // Fallback (если TonConnect UI не загрузился)
