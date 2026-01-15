@@ -963,7 +963,7 @@ body{
 <script>
 (function () {
   const urls = [
-    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768445690"
+    "https://bulltrade-three.vercel.app/api/tonconnect-ui.js?v=1768446485"
   ];
 
   function loadNext(i) {
@@ -997,12 +997,10 @@ window.tonToNanoStr = function(ton){
 </script>
 
 <script>
-// === TonConnect sendTransaction helper (auto-init) ===
+// === TonConnect sendTransaction helper (auto-init, safe) ===
 async function __getTonUI(){
-  // already created
   if(window.__tonUI) return window.__tonUI;
 
-  // wait for library
   const start = Date.now();
   while(true){
     const has =
@@ -1024,12 +1022,14 @@ async function __getTonUI(){
   if(!TonUI) throw new Error("TonConnect UI constructor not found");
 
   const manifestUrl = location.origin + "/tonconnect-manifest.json";
+  window.__DBG_ADD && window.__DBG_ADD("info", "init TonConnectUI manifest=" + manifestUrl);
+
   window.__tonUI = new TonUI({ manifestUrl });
 
-  // keep wallet state in localStorage for UI
   try{
     window.__tonUI.onStatusChange((wallet)=>{
       const raw = wallet?.account?.address || "";
+      window.__DBG_ADD && window.__DBG_ADD("info", "statusChange wallet=" + (raw || "null"));
       if(raw) localStorage.setItem("bt_wallet", raw);
       else localStorage.removeItem("bt_wallet");
     });
@@ -1040,27 +1040,50 @@ async function __getTonUI(){
   return window.__tonUI;
 }
 
+function __isConnected(ui){
+  try{
+    if(ui && ui.wallet) return true;
+    if(ui && ui.account) return true;
+  }catch(_){}
+  return false;
+}
+
 window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
   const ui = await __getTonUI();
 
-  // ensure connected
-  const connected = !!(ui.wallet || ui.account || ui.connected);
-  if(!connected){
-    // this will open wallet selector
-    await ui.connectWallet();
-  }
+  let amt = String(amountNano);
+  amt = amt.replace(/\D/g, "");
+  if(!amt) throw new Error("amountNano is empty");
 
   const now = Math.floor(Date.now() / 1000);
   const tx = {
     validUntil: now + validUntilSec,
     messages: [
       {
-        address: to,
-        amount: String(amountNano),
+        address: String(to),
+        amount: amt
       }
     ]
   };
   if(payload) tx.messages[0].payload = payload;
+
+  window.__DBG_ADD && window.__DBG_ADD("info", "sendTransaction tx=" + JSON.stringify(tx));
+
+  if(!__isConnected(ui)){
+    window.__DBG_ADD && window.__DBG_ADD("info", "wallet not connected -> connectWallet()");
+    try{
+      await ui.connectWallet();
+    }catch(e){
+      const msg = String(e && (e.message || e));
+      if(msg.includes("already connected")){
+        window.__DBG_ADD && window.__DBG_ADD("info", "connectWallet ignored: already connected");
+      } else {
+        throw e;
+      }
+    }
+  } else {
+    window.__DBG_ADD && window.__DBG_ADD("info", "wallet already connected");
+  }
 
   return await ui.sendTransaction(tx);
 };
