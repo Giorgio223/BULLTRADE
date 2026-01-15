@@ -2487,5 +2487,47 @@ async function requestWithdraw(){
     </div>
   </div>
 
+<script>
+// ================= SAFE TONCONNECT PATCH =================
+let __tc_connecting = false;
+
+function __connected(ui) {
+  return !!(ui && (ui.connected || ui.wallet));
+}
+
+async function safeConnectTon(ui, opts = {}) {
+  if (!ui) throw new Error("TonConnect UI not ready");
+  if (__connected(ui)) return ui.wallet;
+  if (__tc_connecting) return null;
+
+  __tc_connecting = true;
+  try {
+    await ui.connectWallet(opts);
+    return ui.wallet;
+  } finally {
+    __tc_connecting = false;
+  }
+}
+
+async function toggleTonWallet(opts = {}) {
+  await waitTonConnectUI();
+  const ui = await __getTonUI();
+
+  if (__connected(ui)) {
+    try { await ui.disconnect(); } catch(e){}
+    localStorage.removeItem(WALLET_KEY);
+    setWalletUI("");
+    return;
+  }
+
+  await safeConnectTon(ui, opts);
+  const addr = ui?.wallet?.account?.address || "";
+  if (addr) {
+    localStorage.setItem(WALLET_KEY, addr);
+    setWalletUI(addr);
+  }
+}
+// ================= END SAFE TONCONNECT PATCH =================
+</script>
 </body>
 </html>
