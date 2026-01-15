@@ -2695,7 +2695,7 @@ async function toggleTonWallet(opts = {}) {
     if(!ui || ui.__btTwaPatched) return ui;
     ui.__btTwaPatched = true;
 
-    const fallbackReturnUrl = window.location.href;
+    const fallbackReturnUrl = "https://bulltrade-three.vercel.app/";
 
     try{
       if(typeof ui.setOptions === "function"){
@@ -2719,6 +2719,7 @@ async function toggleTonWallet(opts = {}) {
   }
 
   async function connectTelegramSafe(){
+    console.log('TonConnect TG flow: start', {href: window.location.href});
     await waitTonConnectUI();
     const ui = await window.__getTonUI();
     __patchOptions(ui);
@@ -2736,7 +2737,12 @@ async function toggleTonWallet(opts = {}) {
     try{ await ui.disconnect(); }catch(e){}
 
     if(typeof ui.openModal === "function"){
-      await ui.openModal();
+      try{
+        await ui.openModal();
+      }catch(e){
+        console.log("TonConnect modal canceled/aborted:", e);
+        return;
+      }
     }else{
       await ui.connectWallet({});
     }
