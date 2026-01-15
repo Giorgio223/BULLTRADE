@@ -1,28 +1,23 @@
-// api/me.js
-import { kvGet, kvSet } from "./_kv.js";
+let __disconnecting = false;
 
-export default async function handler(req, res) {
-  try {
-    if (req.method === "POST") {
-      const { address } = req.body || {};
-      if (!address || typeof address !== "string") return res.status(400).send("address required");
+async function disconnectTonWallet(){
+  if(__disconnecting) return;
+  __disconnecting = true;
 
-      const key = `user:${address}:balance_nano`;
-      const exists = await kvGet(key);
-      if (exists === null) await kvSet(key, "0");
+  try{
+    try {
+      if (window.__tonUI && typeof window.__tonUI.disconnect === "function") {
+        await window.__tonUI.disconnect();
+      }
+    } catch(e){}
 
-      return res.status(200).json({ ok: true });
-    }
+    // очистка локального состояния
+    localStorage.removeItem(WALLET_KEY);
+    setWalletUI("");
 
-    if (req.method === "GET") {
-      const address = req.query.address;
-      if (!address) return res.status(400).send("address required");
-      const bal = await kvGet(`user:${address}:balance_nano`);
-      return res.status(200).json({ balanceNano: bal ? String(bal) : "0" });
-    }
-
-    return res.status(405).send("Method not allowed");
-  } catch (e) {
-    return res.status(500).send(String(e?.message || e));
+    // ВАЖНО: не вызываем /api/me вообще, потому что address нет
+    await fetchServerBalance();
+  } finally {
+    __disconnecting = false;
   }
 }
