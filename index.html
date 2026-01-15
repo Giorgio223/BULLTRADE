@@ -1048,7 +1048,21 @@ function __isConnected(ui){
   return false;
 }
 
-window.sendTonTransaction = async function({to, amountNano, payload, validUntilSec = 300}){
+window.sendTonTransaction = async function(arg1, arg2, arg3, arg4){
+  // Supports both:
+  // 1) sendTonTransaction({to, amountNano, payload, validUntilSec})
+  // 2) sendTonTransaction(to, amountNano, payload, validUntilSec)
+  let to, amountNano, payload, validUntilSec;
+  if(arg1 && typeof arg1 === "object" && !Array.isArray(arg1)){
+    ({to, amountNano, payload, validUntilSec} = arg1);
+  } else {
+    to = arg1;
+    amountNano = arg2;
+    payload = arg3;
+    validUntilSec = arg4;
+  }
+  if(!validUntilSec) validUntilSec = 300;
+
   const ui = await __getTonUI();
 
   // normalize amountNano to integer nanotons string
@@ -1061,9 +1075,7 @@ window.sendTonTransaction = async function({to, amountNano, payload, validUntilS
     }
   }
 
-  // keep only digits
   let amt = amtRaw.replace(/\D/g, "");
-  // trim leading zeros but keep single zero
   amt = amt.replace(/^0+(?=\d)/, "");
 
   if(!amt || amt === "0"){
@@ -1084,8 +1096,15 @@ window.sendTonTransaction = async function({to, amountNano, payload, validUntilS
 
   if(!__isConnected(ui)){
     try{
+      const isTgMiniApp = !!(window.Telegram && window.Telegram.WebApp);
+    if(isTgMiniApp && typeof ui.openSingleWalletModal === "function"){
+      await ui.openSingleWalletModal("telegram-wallet");
+    } else if (typeof ui.openModal === "function"){
+      await ui.openModal();
+    } else {
       await ui.connectWallet();
-    }catch(e){
+    }
+}catch(e){
       const msg = String(e && (e.message || e));
       if(!msg.includes("already connected")) throw e;
     }
