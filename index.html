@@ -2573,5 +2573,94 @@ async function toggleTonWallet(opts = {}) {
 })();
 // ================= END TONCONNECT OVERRIDES =================
 </script>
+
+<script>
+// ================= GLOBAL TONCONNECT NO-DOUBLE-CONNECT PATCH =================
+(function(){
+  function __patchTonUI(ui){
+    if(!ui || ui.__btPatched) return ui;
+    ui.__btPatched = true;
+
+    const origConnectWallet = typeof ui.connectWallet === "function" ? ui.connectWallet.bind(ui) : null;
+
+    if(origConnectWallet){
+      ui.connectWallet = async function(opts){
+        // Wait for session restore if supported (prevents race)
+        try{
+          if(this.connectionRestored && typeof this.connectionRestored.then === "function"){
+            await this.connectionRestored;
+          }
+        }catch(e){}
+
+        // If already connected -> NO-OP (return current wallet)
+        try{
+          if(this.connected || this.wallet){
+            return this.wallet;
+          }
+        }catch(e){}
+
+        // Otherwise do real connect
+        try{
+          return await origConnectWallet(opts);
+        }catch(e){
+          const msg = String(e && (e.message || e));
+          if(msg.includes("wallet already connected") || msg.includes("already connected")){
+            // Treat as success
+            return this.wallet;
+          }
+          throw e;
+        }
+      };
+    }
+
+    return ui;
+  }
+
+  // Wrap __getTonUI to patch every time an instance is obtained
+  const prevGet = window.__getTonUI;
+  if(typeof prevGet === "function"){
+    window.__getTonUI = async function(){
+      const ui = await prevGet.apply(this, arguments);
+      return __patchTonUI(ui);
+    };
+  }
+
+  // Patch existing global instance if present
+  try{
+    if(window.__tonUI) __patchTonUI(window.__tonUI);
+  }catch(e){}
+
+  // Make connect button safe toggle (if button exists)
+  try{
+    const btn = document.getElementById("connectWalletBtn");
+    if(btn){
+      btn.onclick = async function(){
+        await waitTonConnectUI();
+        const ui = await window.__getTonUI();
+        __patchTonUI(ui);
+
+        // Wait restore
+        try{ if(ui.connectionRestored) await ui.connectionRestored; }catch(e){}
+
+        if(ui.connected || ui.wallet){
+          try{ await ui.disconnect(); }catch(e){}
+          try{ localStorage.removeItem(WALLET_KEY); }catch(e){}
+          try{ setWalletUI(""); }catch(e){}
+          return;
+        }
+
+        await ui.connectWallet({});
+        const addr = ui?.wallet?.account?.address || "";
+        if(addr){
+          try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
+          try{ setWalletUI(addr); }catch(e){}
+        }
+      };
+    }
+  }catch(e){}
+})();
+// ================= END GLOBAL TONCONNECT PATCH =================
+</script>
+
 </body>
 </html>
