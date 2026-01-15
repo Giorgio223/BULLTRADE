@@ -2662,5 +2662,118 @@ async function toggleTonWallet(opts = {}) {
 // ================= END GLOBAL TONCONNECT PATCH =================
 </script>
 
+
+<script>
+// ================= TELEGRAM TON WALLET CONNECT PATCH =================
+// 1) В Telegram (Mini App / WebView) используем openModal(), а не прямой connectWallet()
+// 2) Ждем connectionRestored перед действиями
+// 3) Не делаем double-connect
+// 4) Ставим twaReturnUrl (лучше заменить на https://t.me/<BOT>/<APP>)
+
+(function(){
+  const __isTelegram = () => !!(window.Telegram && window.Telegram.WebApp);
+  const __sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function __waitWallet(ui, timeoutMs = 20000){
+    const t0 = Date.now();
+    while(Date.now() - t0 < timeoutMs){
+      if(ui && (ui.connected || ui.wallet)) return ui.wallet;
+      await __sleep(200);
+    }
+    return null;
+  }
+
+  async function __ensureRestored(ui){
+    try{
+      if(ui && ui.connectionRestored && typeof ui.connectionRestored.then === "function"){
+        await ui.connectionRestored;
+      }
+    }catch(e){}
+  }
+
+  function __patchOptions(ui){
+    if(!ui || ui.__btTwaPatched) return ui;
+    ui.__btTwaPatched = true;
+
+    const fallbackReturnUrl = window.location.href;
+
+    try{
+      if(typeof ui.setOptions === "function"){
+        ui.setOptions({
+          actionsConfiguration: {
+            twaReturnUrl: fallbackReturnUrl
+          }
+        });
+      }
+    }catch(e){}
+
+    return ui;
+  }
+
+  const prevGet = window.__getTonUI;
+  if(typeof prevGet === "function"){
+    window.__getTonUI = async function(){
+      const ui = await prevGet.apply(this, arguments);
+      return __patchOptions(ui);
+    };
+  }
+
+  async function connectTelegramSafe(){
+    await waitTonConnectUI();
+    const ui = await window.__getTonUI();
+    __patchOptions(ui);
+    await __ensureRestored(ui);
+
+    if(ui.connected || ui.wallet){
+      const addr = ui?.wallet?.account?.address || "";
+      if(addr){
+        try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
+        try{ setWalletUI(addr); }catch(e){}
+      }
+      return;
+    }
+
+    try{ await ui.disconnect(); }catch(e){}
+
+    if(typeof ui.openModal === "function"){
+      await ui.openModal();
+    }else{
+      await ui.connectWallet({});
+    }
+
+    await __waitWallet(ui, 20000);
+
+    const addr = ui?.wallet?.account?.address || "";
+    if(addr){
+      try{ localStorage.setItem(WALLET_KEY, addr); }catch(e){}
+      try{ setWalletUI(addr); }catch(e){}
+    }
+  }
+
+  const prevConnectTonWallet = window.connectTonWallet;
+  window.connectTonWallet = async function(opts = {}){
+    if(__isTelegram()){
+      return connectTelegramSafe();
+    }
+    if(typeof prevConnectTonWallet === "function"){
+      return prevConnectTonWallet(opts);
+    }
+    await waitTonConnectUI();
+    const ui = await window.__getTonUI();
+    await __ensureRestored(ui);
+    if(ui.connected || ui.wallet) return;
+    await ui.connectWallet(opts);
+  };
+
+  try{
+    const btn = document.getElementById("connectWalletBtn");
+    if(btn){
+      btn.onclick = () => window.connectTonWallet({});
+    }
+  }catch(e){}
+})();
+// ================= END TELEGRAM TON WALLET CONNECT PATCH =================
+</script>
+
 </body>
 </html>
